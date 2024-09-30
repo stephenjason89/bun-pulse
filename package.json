@@ -1,0 +1,60 @@
+{
+	"name": "bun-pulse",
+	"type": "module",
+	"version": "1.0.0",
+	"description": "BunPulse is a lightweight, high-performance WebSocket server built on Bun, fully compatible with the Pusher protocol. Easily implement real-time communication for your applications with minimal setup.",
+	"author": "Stephen Jason Wang",
+	"license": "AGPL-3.0",
+	"homepage": "https://github.com/stephenjason89/bun-pulse#readme",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/stephenjason89/bun-pulse.git"
+	},
+	"bugs": {
+		"url": "https://github.com/stephenjason89/bun-pulse/issues"
+	},
+	"keywords": [
+		"bun",
+		"pusher",
+		"websocket",
+		"real-time",
+		"pusher-protocol",
+		"server",
+		"bun-websocket",
+		"pusher-alternative",
+		"realtime-communication",
+		"pubsub",
+		"push-notifications"
+	],
+	"main": "dist/index.js",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"test": "bun test",
+		"build": "tsc",
+		"prepublishOnly": "npm run build",
+		"prepare": "husky",
+		"commitlint": "commitlint --edit"
+	},
+	"dependencies": {
+		"consola": "^3.2.3"
+	},
+	"devDependencies": {
+		"@antfu/eslint-config": "^3.7.3",
+		"@commitlint/cli": "^19.5.0",
+		"@commitlint/config-conventional": "^19.5.0",
+		"@semantic-release/changelog": "^6.0.3",
+		"@semantic-release/commit-analyzer": "^13.0.0",
+		"@semantic-release/git": "^10.0.1",
+		"@semantic-release/github": "^11.0.0",
+		"@semantic-release/release-notes-generator": "^14.0.1",
+		"@types/bun": "^1.1.10",
+		"eslint": "^9.11.1",
+		"husky": "^9.1.6",
+		"lint-staged": "^15.2.10"
+	},
+	"lint-staged": {
+		"*.{js,cjs,mjs,ts,jsx,json,json5,tsx,vue,md}": "eslint --fix"
+	}
+}
