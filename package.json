@@ -8,7 +8,7 @@
 	"homepage": "https://github.com/stephenjason89/bun-pulse#readme",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/stephenjason89/bun-pulse.git"
+		"url": "git+https://github.com/stephenjason89/bun-pulse.git"
 	},
 	"bugs": {
 		"url": "https://github.com/stephenjason89/bun-pulse/issues"
@@ -48,6 +48,7 @@
 		"@semantic-release/commit-analyzer": "^13.0.0",
 		"@semantic-release/git": "^10.0.1",
 		"@semantic-release/github": "^11.0.0",
+		"@semantic-release/npm": "^12.0.1",
 		"@semantic-release/release-notes-generator": "^14.0.1",
 		"@types/bun": "^1.1.10",
 		"eslint": "^9.11.1",
