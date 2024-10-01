@@ -1,7 +1,7 @@
 {
 	"name": "bun-pulse",
 	"type": "module",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"description": "BunPulse is a lightweight, high-performance WebSocket server built on Bun, fully compatible with the Pusher protocol. Easily implement real-time communication for your applications with minimal setup.",
 	"author": "Stephen Jason Wang",
 	"license": "AGPL-3.0",
