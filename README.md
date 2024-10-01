@@ -54,8 +54,11 @@ Setting up **BunPulse** is quick and easy. Here's how you can start your own Web
 ```typescript
 import { startBunPulse } from 'bun-pulse'
 
-const server = startBunPulse({ port: 6001 }) // Start BunPulse on port 6001
+// Starts BunPulse on a custom port (default: 6001)
+const server = startBunPulse({ port: 7000 })
 ```
+
+then `bun run your-file.ts` to start the server.
 
 ### Handling Events and Forwarding Messages
 
