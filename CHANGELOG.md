@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/stephenjason89/bun-pulse/compare/v1.0.2...v1.1.0) (2024-10-09)
+
+
+### Features
+
+* used bun CryptoHasher instead of node:crypto alternative ([6f216c3](https://github.com/stephenjason89/bun-pulse/commit/6f216c389783f608881cc71142b1c7d0ea771461))
+
 # 1.0.0 (2024-10-01)
 
 
