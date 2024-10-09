@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { CryptoHasher } from 'bun'
 import { createConsola } from 'consola'
 
 // Simple utility to generate unique socket ID
@@ -8,7 +8,7 @@ export function generateSocketId() {
 
 // Generates a HMAC SHA-256 hex digest for the given message and secret.
 export function generateHmacSHA256HexDigest(message: string, secret: string): string {
-	const hmac = createHmac('sha256', secret)
+	const hmac = new CryptoHasher('sha256', secret)
 	hmac.update(message)
 	return hmac.digest('hex')
 }
