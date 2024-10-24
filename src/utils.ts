@@ -7,9 +7,9 @@ export function generateSocketId() {
 }
 
 // Generates a HMAC SHA-256 hex digest for the given message and secret.
-export function generateHmacSHA256HexDigest(message: string, secret: string): string {
+export function generateHmacSHA256HexDigest(socketIdChannel: string, secret: string): string {
 	const hmac = new CryptoHasher('sha256', secret)
-	hmac.update(message)
+	hmac.update(socketIdChannel)
 	return hmac.digest('hex')
 }
 
