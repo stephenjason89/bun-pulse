@@ -11,9 +11,9 @@ describe('Utility Functions Tests', () => {
 
 	// Test the generateHmacSHA256HexDigest function
 	it('should generate a valid HMAC SHA-256 hex digest', () => {
-		const message = 'test-message'
+		const socketIdChannel = 'test-socket-id:test-channel'
 		const secret = 'test-secret'
-		const digest = generateHmacSHA256HexDigest(message, secret)
+		const digest = generateHmacSHA256HexDigest(socketIdChannel, secret)
 		expect(digest).toHaveLength(64) // Validate the length of the SHA-256 hex digest
 		expect(digest).toMatch(/^[a-f0-9]+$/) // Validate the format (hex characters)
 	})
