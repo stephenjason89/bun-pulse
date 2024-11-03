@@ -118,6 +118,7 @@ channel.bind('my-event', (data) => {
 
 You can customize **BunPulse** by passing configuration options when starting the server. These options include:
 
+- `*`: All bun websocket server options are supported, see [bun docs](https://bun.sh/docs/api/http#bun-serve) for more info.
 - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
 - `subscriptionVacancyUrl`: An optional URL to notify when a channel is vacated (i.e., no more subscribers).
 - `heartbeatInterval`: The interval (in milliseconds) at which WebSocket heartbeat pings are sent to keep the connection alive (default: `25000`).

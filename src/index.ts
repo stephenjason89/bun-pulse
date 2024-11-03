@@ -1,4 +1,4 @@
-import type { ServerWebSocket } from 'bun'
+import type { ServeOptions, ServerWebSocket } from 'bun'
 import type { WebSocketData } from './types'
 import { consola } from 'consola'
 import {
@@ -10,7 +10,6 @@ import {
 } from './websocket'
 
 interface BunPulseConfig {
-	port?: number
 	subscriptionVacancyUrl?: string
 	heartbeat?: {
 		interval?: number
@@ -19,12 +18,12 @@ interface BunPulseConfig {
 	}
 }
 
-export function startBunPulse(config: BunPulseConfig = { port: 6001 }) {
-	const { port, subscriptionVacancyUrl, heartbeat = {} } = config
+export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = { port: 6001 }) {
+	const { subscriptionVacancyUrl, heartbeat = {}, ...serverOptions } = config
 	const finalHeartbeat = { interval: 25000, timeout: 60000, sendPing: false, ...heartbeat }
 
 	const server = Bun.serve({
-		port,
+		...serverOptions,
 		fetch(req, server) {
 			if (req.method === 'POST') {
 				return handleEventPublishing(req, server)
