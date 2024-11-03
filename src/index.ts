@@ -37,7 +37,7 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 			open: ws => initializeWebSocketConnection(ws, finalHeartbeat),
 			close(ws) {
 				consola.info(`Connection closed for Socket ID: ${ws.data.socketId}, Channel: ${ws.data.channel || 'No channel'}`)
-				unsubscribeFromChannel(ws, ws.data.channel, subscriptionVacancyUrl)
+				unsubscribeFromChannel(ws, ws.data.channel, server, subscriptionVacancyUrl)
 			},
 		},
 	})
