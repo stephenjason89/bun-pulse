@@ -101,7 +101,9 @@ export async function handleEventPublishing(req: Request, server: Server) {
 
 // Subscribes the WebSocket to a channel
 function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: WebSocketData, server: Server) {
-	if (!isAuthorized(ws.data.socketId, subscriptionData)) {
+	const isPrivateChannel = /^(?:private-|presence-)/.test(subscriptionData.channel)
+
+	if (isPrivateChannel && !isAuthorized(ws.data.socketId, subscriptionData)) {
 		ws.send(
 			JSON.stringify({
 				event: 'pusher:error',
