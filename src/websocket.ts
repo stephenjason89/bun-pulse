@@ -5,7 +5,7 @@ import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
 import { generateHmacSHA256HexDigest, generateSocketId, messageLogger } from './utils'
 
-const presenceChannels: Record<string, { [socketId: string]: { user_id: string, user_info: Record<string, any> } }> = {}
+const presenceChannels: Record<string, { [userId: string]: { user_info: Record<string, any>, sockets?: Set<string> } }> = {}
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
@@ -126,10 +126,11 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 
 	if (isPresenceChannel) {
 		const channelData: Extract<WebSocketData['channel_data'], object> = typeof ws.data.channel_data === 'string' ? JSON.parse(ws.data.channel_data || '{}') : (ws.data.channel_data ?? {})
-		const user = { user_id: channelData.user_id, user_info: channelData.user_info || {} }
+		const user_id = channelData.user_id
+		const user_info = channelData.user_info || {}
 
 		// Ensure user_id is present for presence channels
-		if (!user.user_id) {
+		if (!user_id) {
 			ws.send(JSON.stringify({
 				event: 'pusher:error',
 				data: { message: 'Missing user_id for presence channel', code: 4009 },
@@ -141,17 +142,28 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		if (!presenceChannels[subscriptionData.channel]) {
 			presenceChannels[subscriptionData.channel] = {}
 		}
-		presenceChannels[subscriptionData.channel][ws.data.socketId] = user
 
-		// Notify all members of the new member joining
-		server.publish(subscriptionData.channel, JSON.stringify({
-			event: 'pusher_internal:member_added',
-			channel: subscriptionData.channel,
-			data: JSON.stringify(user),
-		}))
+		const user = presenceChannels[subscriptionData.channel][user_id]
+
+		if (user) {
+			// Add this socket to the user's existing connections
+			user.sockets.add(ws.data.socketId)
+		}
+		else {
+			// New user for this presence channel, add user and fire `member_added` event
+			presenceChannels[subscriptionData.channel][user_id] = { user_info, sockets: new Set([ws.data.socketId]) }
+
+			// Notify all members of the new member joining
+			server.publish(subscriptionData.channel, JSON.stringify({
+				event: 'pusher_internal:member_added',
+				channel: subscriptionData.channel,
+				data: JSON.stringify({ user_id, user_info }),
+			}))
+		}
 
 		// Send the initial list of users to the new member
-		const members = Object.values(presenceChannels[subscriptionData.channel])
+		const members = Object.values(presenceChannels[subscriptionData.channel]).map(({ user_info }, user_id) => ({ user_id, user_info }))
+
 		ws.send(JSON.stringify({
 			event: 'pusher_internal:subscription_succeeded',
 			channel: subscriptionData.channel,
@@ -182,27 +194,29 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 	ws.unsubscribe(channel)
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 
-	// Handle presence channel user removal
 	if (channel.startsWith('presence-') && presenceChannels[channel]) {
-		// Remove the user from the presence channel
-		const user = presenceChannels[channel][ws.data.socketId]
-		delete presenceChannels[channel][ws.data.socketId]
+		const user_id = Object.keys(presenceChannels[channel]).find(id => presenceChannels[channel][id].sockets.has(ws.data.socketId))
 
-		// Notify remaining members of user removal
-		if (user) {
-			server.publish(channel, JSON.stringify({
-				event: 'pusher_internal:member_removed',
-				channel,
-				data: JSON.stringify({ user_id: user.user_id }),
-			}))
-		}
+		if (user_id) {
+			const user = presenceChannels[channel][user_id]
+			user.sockets.delete(ws.data.socketId)
 
-		// If the presence channel is empty, delete it and notify vacancy
-		if (Object.keys(presenceChannels[channel]).length === 0) {
-			delete presenceChannels[channel] // Clean up the empty channel
+			// If no more sockets for this user_id, remove user and fire `member_removed`
+			if (user.sockets.size === 0) {
+				delete presenceChannels[channel][user_id]
+				server.publish(channel, JSON.stringify({
+					event: 'pusher_internal:member_removed',
+					channel,
+					data: JSON.stringify({ user_id }),
+				}))
 
-			if (subscriptionVacancyUrl) {
-				notifyChannelVacancy(channel, subscriptionVacancyUrl)
+				// If the channel is now empty, trigger the vacancy notification
+				if (Object.keys(presenceChannels[channel]).length === 0) {
+					delete presenceChannels[channel]
+					if (subscriptionVacancyUrl) {
+						notifyChannelVacancy(channel, subscriptionVacancyUrl)
+					}
+				}
 			}
 		}
 	}
