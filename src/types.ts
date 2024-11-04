@@ -5,7 +5,7 @@ export interface WebSocketData {
 	socketId: string
 	lastPingPong?: number
 	channel_data?: string | {
-		user_id: string
+		user_id?: string
 		user_info?: Record<string, any>
 	}
 	[key: string]: any
