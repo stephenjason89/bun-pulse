@@ -212,11 +212,24 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 async function notifyChannelVacancy(channel: string, subscriptionVacancyUrl: string, retries = 3, delay = 1000) {
 	const payload = JSON.stringify({ events: [{ name: 'channel_vacated', channel }] })
 
+	// Check if PUSHER_APP_SECRET and PUSHER_APP_KEY are defined
+	const secret = import.meta.env.PUSHER_APP_SECRET
+	const appKey = import.meta.env.PUSHER_APP_KEY
+
+	if (!secret || !appKey) {
+		consola.error('Missing PUSHER_APP_SECRET or PUSHER_APP_KEY. Skipping webhook notification.')
+		return
+	}
+
 	for (let attempt = 0; attempt <= retries; attempt++) {
 		try {
 			const response = await fetch(subscriptionVacancyUrl, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					'X-Pusher-Signature': generateHmacSHA256HexDigest(payload, secret),
+					'X-Pusher-Key': appKey,
+				},
 				body: payload,
 			})
 
