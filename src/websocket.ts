@@ -197,14 +197,14 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 			}))
 		}
 
-		// If the presence channel is empty, delete it
+		// If the presence channel is empty, delete it and notify vacancy
 		if (Object.keys(presenceChannels[channel]).length === 0) {
-			delete presenceChannels[channel]
-		}
-	}
+			delete presenceChannels[channel] // Clean up the empty channel
 
-	if (subscriptionVacancyUrl) {
-		notifyChannelVacancy(channel, subscriptionVacancyUrl)
+			if (subscriptionVacancyUrl) {
+				notifyChannelVacancy(channel, subscriptionVacancyUrl)
+			}
+		}
 	}
 }
 
