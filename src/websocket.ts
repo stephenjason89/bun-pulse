@@ -6,6 +6,7 @@ import { WebSocketReadyState } from './types'
 import { generateHmacSHA256HexDigest, generateSocketId, messageLogger } from './utils'
 
 const presenceChannels: Record<string, { [userId: string]: { user_info: Record<string, any>, sockets?: Set<string> } }> = {}
+const pendingVacatedWebhookTimeouts: Record<string, Timer> = {}
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
@@ -235,44 +236,55 @@ async function notifyChannelVacancy(channel: string, subscriptionVacancyUrl: str
 		return
 	}
 
-	for (let attempt = 0; attempt <= retries; attempt++) {
-		try {
-			const response = await fetch(subscriptionVacancyUrl, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-Pusher-Signature': generateHmacSHA256HexDigest(payload, secret),
-					'X-Pusher-Key': appKey,
-				},
-				body: payload,
-			})
-
-			if (response.ok) {
-				consola.success(`Channel Vacated - Channel: ${channel}`)
-				return
-			}
-			else {
-				const errorText = await response.text()
-				consola.error(`Channel Vacancy Error - Status: ${response.status}, Error: ${errorText}`)
-
-				if (response.status >= 400 && response.status < 500) {
-					// Do not retry for 4xx errors (client-side)
-					consola.error('Client error occurred, not retrying...')
-					break
-				}
-			}
-		}
-		catch (error) {
-			consola.error(`Vacancy Notification Error - Channel: ${channel}, Attempt: ${attempt + 1}, Error: ${error.message}`)
-		}
-
-		// Retry with exponential backoff
-		const backoffTime = delay * 2 ** attempt
-		consola.info(`Retrying in ${backoffTime}ms...`)
-		await new Promise(resolve => setTimeout(resolve, backoffTime))
+	// Clear any existing pending webhook for this channel to avoid duplicate requests
+	if (pendingVacatedWebhookTimeouts[channel]) {
+		clearTimeout(pendingVacatedWebhookTimeouts[channel])
+		delete pendingVacatedWebhookTimeouts[channel]
 	}
 
-	consola.error(`Failed to notify channel vacancy after ${retries + 1} attempts - Channel: ${channel}`)
+	// Set up a delayed webhook notification
+	pendingVacatedWebhookTimeouts[channel] = setTimeout(async () => {
+		for (let attempt = 0; attempt <= retries; attempt++) {
+			try {
+				const response = await fetch(subscriptionVacancyUrl, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Pusher-Signature': generateHmacSHA256HexDigest(payload, secret),
+						'X-Pusher-Key': appKey,
+					},
+					body: payload,
+				})
+
+				if (response.ok) {
+					consola.success(`Channel Vacated - Channel: ${channel}`)
+					delete pendingVacatedWebhookTimeouts[channel] // Remove the timeout after success
+					return
+				}
+				else {
+					const errorText = await response.text()
+					consola.error(`Channel Vacancy Error - Status: ${response.status}, Error: ${errorText}`)
+
+					if (response.status >= 400 && response.status < 500) {
+						// Do not retry for 4xx errors (client-side)
+						consola.error('Client error occurred, not retrying...')
+						break
+					}
+				}
+			}
+			catch (error) {
+				consola.error(`Vacancy Notification Error - Channel: ${channel}, Attempt: ${attempt + 1}, Error: ${error.message}`)
+			}
+
+			// Retry with exponential backoff
+			const backoffTime = delay * 2 ** attempt
+			consola.info(`Retrying in ${backoffTime}ms...`)
+			await new Promise(resolve => setTimeout(resolve, backoffTime))
+		}
+
+		consola.error(`Failed to notify channel vacancy after ${retries + 1} attempts - Channel: ${channel}`)
+		delete pendingVacatedWebhookTimeouts[channel]
+	}, 1000)
 }
 
 // Authorizes WebSocket connections
