@@ -1,11 +1,18 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
-import type { PusherEvent, WebSocketData } from './types'
+import type { Channels, PusherEvent, WebSocketData } from './types'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
-import { generateHmacSHA256HexDigest, generateSocketId, messageLogger } from './utils'
+import {
+	axiom,
+	generateHmacSHA256HexDigest,
+	generateSocketId,
+	getChannelConnections,
+	getChannelType,
+	messageLogger,
+} from './utils'
 
-const channels: Record<string, { [userId: string]: { user_info: Record<string, any>, sockets: Set<string> } }> = {}
+const channels: Channels = {}
 const pendingVacatedWebhookTimeouts: Record<string, Timer> = {}
 
 // Initializes a WebSocket connection with heartbeat settings
@@ -38,12 +45,19 @@ export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>
 // Handles WebSocket upgrade requests
 export async function handleWebSocketUpgrade(req: Request, server: Server) {
 	const url = req.url
+	const urlParams = new URLSearchParams(url.split('?')[1])
+
 	const success = server.upgrade(req, {
 		data: {
 			createdAt: Date.now(),
 			channel: '',
 			auth: '',
 			socketId: generateSocketId(),
+			origin: req.headers.get('Origin') || 'N/A',
+			userAgent: req.headers.get('User-Agent') || 'N/A',
+			client: urlParams.get('client') || 'N/A',
+			version: urlParams.get('version') || 'N/A',
+			protocol: urlParams.get('protocol') || 'N/A',
 		},
 	})
 
@@ -92,7 +106,20 @@ export async function handleEventPublishing(req: Request, server: Server) {
 	try {
 		const body = (await req.json()) as PusherEvent
 		const eventData = { event: body.name, channel: body.channel, data: body.data }
+		const startTime = Date.now()
 		server.publish(body.channel, JSON.stringify(eventData))
+
+		axiom.log('pusher_channel:broadcast', {
+			app: { id: import.meta.env.PUSHER_APP_ID },
+			channel: { name: body.channel, type: getChannelType(body.channel) },
+			broadcast: {
+				event: body.name,
+				sockedId: body.data.socketId,
+				duration: Date.now() - startTime,
+				connections: getChannelConnections(body.channel, channels),
+			},
+		})
+
 		consola.success(`Event Published - Channel: ${body.channel}, Event: ${body.name}`)
 		return new Response('{}', { headers: { 'Content-Type': 'application/json' } })
 	}
@@ -105,7 +132,7 @@ export async function handleEventPublishing(req: Request, server: Server) {
 // Subscribes the WebSocket to a channel
 function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: WebSocketData, server: Server) {
 	const isRestrictedChannel = /^(?:private-|presence-)/.test(subscriptionData.channel)
-	const isPresenceChannel = subscriptionData.channel.startsWith('presence-')
+	const isPresenceChannel = getChannelType(subscriptionData.channel) === 'presence'
 
 	if (isRestrictedChannel && !isAuthorized(ws.data.socketId, subscriptionData)) {
 		ws.send(
@@ -157,11 +184,22 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 
 		// Notify all members of the new member joining
 		if (isPresenceChannel) {
+			const startTime = Date.now()
 			server.publish(subscriptionData.channel, JSON.stringify({
 				event: 'pusher_internal:member_added',
 				channel: subscriptionData.channel,
 				data: JSON.stringify({ user_id, user_info }),
 			}))
+			axiom.log('pusher_channel:broadcast', {
+				app: { id: import.meta.env.PUSHER_APP_ID },
+				channel: { name: subscriptionData.channel, type: getChannelType(subscriptionData.channel) },
+				broadcast: {
+					event: 'pusher_internal:member_added',
+					sockedId: subscriptionData.socketId,
+					duration: Date.now() - startTime,
+					connections: getChannelConnections(subscriptionData.channel, channels),
+				},
+			})
 		}
 	}
 
@@ -199,12 +237,23 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 		// If no more sockets for this user_id, remove user and fire `member_removed`
 		if (user.sockets.size === 0) {
 			delete channels[channel][user_id]
-			if (channel.startsWith('presence-')) {
+			if (getChannelType(channel) === 'presence') {
+				const startTime = Date.now()
 				server.publish(channel, JSON.stringify({
 					event: 'pusher_internal:member_removed',
 					channel,
 					data: JSON.stringify({ user_id }),
 				}))
+				axiom.log('pusher_channel:broadcast', {
+					app: { id: import.meta.env.PUSHER_APP_ID },
+					channel: { name: channel, type: getChannelType(channel) },
+					broadcast: {
+						event: 'pusher_internal:member_removed',
+						sockedId: ws.data.socketId,
+						duration: Date.now() - startTime,
+						connections: getChannelConnections(channel, channels),
+					},
+				})
 			}
 
 			// If the channel is now empty, trigger the vacancy notification

@@ -38,6 +38,7 @@
 		"commitlint": "commitlint --edit"
 	},
 	"dependencies": {
+		"@axiomhq/js": "^1.2.0",
 		"consola": "^3.2.3"
 	},
 	"devDependencies": {
