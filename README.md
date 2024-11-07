@@ -4,11 +4,13 @@
 
 ## Features
 
-- 🟢 **Pusher Protocol Compatibility**: Drop-in replacement for Pusher. Point your apps to **BunPulse**, and everything will continue working as before.
-- ⚡ **Built on Bun**: Leverages Bun's high performance for WebSocket connections.
+- 🟢 **Pusher Protocol Compatibility**: Drop-in replacement for Pusher. Point your apps to BunPulse, and everything will continue working as before, including support for presence channels to track online users and their statuses.
+- ⚡  **Built on Bun**: Leverages Bun's high performance for WebSocket connections.
 - 🔄 **Real-time Communication**: Seamless real-time messaging and notifications.
 - 🔒 **Secure Connections**: HMAC-based authentication for secure WebSocket connections.
 - 🛠️ **Minimal Setup**: Get started with just a few lines of code.
+- 📝 **Enhanced Logging**: Detailed logging of connection events and broadcasting metrics for better analytics.
+- 🔗 **Webhook Support**: Notifies when channels are vacated or occupied, enhancing real-time communication monitoring.
 
 ## Table of Contents
 
@@ -91,7 +93,7 @@ To integrate **BunPulse** with Laravel Broadcasting, configure the `broadcasting
 
 Alternatively, other methods to configure BunPulse can be found in the [Pusher documentation](https://pusher.com/docs/channels/channels_libraries/libraries/).
 
-### Frontend: Using Pusher.js or Laravel Echo
+### Frontend: Using Pusher.js
 
 On the frontend, you can use the `pusher-js` package, which works seamlessly with **BunPulse**, or you can use Laravel Echo if you prefer.
 
@@ -269,12 +271,13 @@ Listens for specific WebSocket or Pusher events (e.g., `pusher:subscribe`).
 We welcome contributions to **BunPulse**! If you're interested in improving the project, fixing bugs, or adding new features, we encourage you to submit a pull request. Below are some areas where contributions would be especially valuable:
 
 ### Areas for Improvement:
-1. **Presence Channels**:
-   - **Goal**: Implement support for presence channels, allowing clients to track and broadcast who is currently subscribed to a channel.
-   - **What’s Needed**:
-      - Add member tracking logic for `presence-` prefixed channels.
-      - Broadcast `pusher_internal:member_added` and `pusher_internal:member_removed` events when members join/leave the channel.
-      - Provide a list of current members when a client subscribes.
+1. **Enhanced Logging**:
+    - **Goal**: Expand logging capabilities to capture and report detailed metrics and events.
+    - **What’s Needed**:
+        - Implement logging for additional events, including error handling during message processing and publishing.
+        - Ensure that logs are structured and sent to Axiom for analytics.
+        - Capture relevant data such as payload sizes for messages, response durations, and specific event details.
+        - Consider adding logging for connection metrics, such as the number of active connections and their respective channels.
 
 2. **Client-Side Events (`client-*`)**:
    - **Goal**: Enable clients to broadcast custom events (`client-*` prefixed) to other clients in the same private channel, while excluding the sender from receiving the event.
@@ -295,10 +298,10 @@ We welcome contributions to **BunPulse**! If you're interested in improving the 
       - Add more robust error handling mechanisms for connection issues and HTTP failures.
 
 5. **Webhook Support**:
-   - **Goal**: Add support for additional webhooks, such as when a channel is occupied or vacated.
-   - **What’s Needed**:
-      - Implement webhook notifications when key events occur (e.g., `channel_occupied`, `channel_vacated`, etc.).
-
+    - **Goal**: Enhance existing webhook functionality for key events.
+    - **What’s Needed**:
+        - Extend webhook support to cover additional events such as `channel_occupied` and other relevant events as needed.
+        - Ensure robust error handling and logging for webhook notifications to improve reliability.
 ---
 
 ### How to Contribute:
@@ -327,6 +330,7 @@ To better understand how **BunPulse** works and how it mirrors the Pusher protoc
 - [WebSockets Overview](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API) - A comprehensive guide to how WebSockets work, provided by MDN.
 - [Bun Documentation](https://bun.sh/docs) - Learn about Bun's features, including its high-performance server capabilities.
 - [HMAC SHA256 Authentication](https://en.wikipedia.org/wiki/HMAC) - Understand the HMAC-based authentication method used by **BunPulse** for secure WebSocket connections.
+- [Axiom Documentation](https://www.axiom.co/docs) - Learn more about using Axiom for logging and analytics.
 
 ## License
 
