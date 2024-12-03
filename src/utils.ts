@@ -23,7 +23,7 @@ export const messageLogger = createConsola({
 	},
 })
 
-const axiomClient = new Axiom({
+const axiomClient = import.meta.env.AXIOM_API_KEY && new Axiom({
 	token: import.meta.env.AXIOM_API_KEY,
 })
 
