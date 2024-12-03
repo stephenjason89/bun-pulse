@@ -31,7 +31,7 @@ export const axiom = ({
 	log: (event: string, data: object) => {
 		if (!axiomClient)
 			return
-		axiomClient.ingest('bun-pulse', [{ ...data, $event: event }])
+		axiomClient.ingest(import.meta.env.AXIOM_DATASET ?? 'bun-pulse', [{ ...data, $event: event }])
 	},
 })
 
