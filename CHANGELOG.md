@@ -1,3 +1,15 @@
+## [1.5.1](https://github.com/stephenjason89/bun-pulse/compare/v1.5.0...v1.5.1) (2024-12-03)
+
+### 🐛 Bug Fixes
+
+* disable axiomClient gracefully when no API key is provided ([ada6e53](https://github.com/stephenjason89/bun-pulse/commit/ada6e531ffda723f6f1cba9fd4e172880c2e6732))
+
+### 📦 Chores
+
+* include .env.example and support AXIOM_DATASET customization ([6bbfed3](https://github.com/stephenjason89/bun-pulse/commit/6bbfed32185c6532ae2392386c528179dd916c05))
+* **release:** 1.5.1-beta.1 [skip ci] ([8d2d7ad](https://github.com/stephenjason89/bun-pulse/commit/8d2d7ad5c287becb779b5d7f174b5b307af0613f))
+* updated releaserc ([110b1b8](https://github.com/stephenjason89/bun-pulse/commit/110b1b83e80faf3d255d23c09ead137ed73bf4be))
+
 ## [1.5.1-beta.1](https://github.com/stephenjason89/bun-pulse/compare/v1.5.0...v1.5.1-beta.1) (2024-12-03)
 
 ### 🐛 Bug Fixes
