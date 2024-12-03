@@ -1,3 +1,10 @@
+## [1.5.1-develop.1](https://github.com/stephenjason89/bun-pulse/compare/v1.5.0...v1.5.1-develop.1) (2024-12-03)
+
+
+### Bug Fixes
+
+* disable axiomClient gracefully when no API key is provided ([ada6e53](https://github.com/stephenjason89/bun-pulse/commit/ada6e531ffda723f6f1cba9fd4e172880c2e6732))
+
 # [1.5.0](https://github.com/stephenjason89/bun-pulse/compare/v1.4.0...v1.5.0) (2024-11-07)
 
 
