@@ -38,8 +38,8 @@
 		"commitlint": "commitlint --edit"
 	},
 	"dependencies": {
-		"@axiomhq/js": "^1.2.0",
-		"consola": "^3.2.3"
+		"@axiomhq/js": "^1.6.0",
+		"consola": "^3.4.2"
 	},
 	"devDependencies": {
 		"@antfu/eslint-config": "^3.7.3",
