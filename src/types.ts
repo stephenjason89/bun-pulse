@@ -8,6 +8,7 @@ export interface WebSocketData {
 	client: string
 	version: string
 	protocol: string
+	subscribedChannels: string[]
 	lastPingPong?: number
 	channel_data?: string | {
 		user_id?: string
@@ -16,11 +17,25 @@ export interface WebSocketData {
 	[key: string]: any
 }
 
+export interface SubscriptionData {
+	channel: string
+	auth?: string
+	channel_data?: string | {
+		user_id?: string
+		user_info?: Record<string, any>
+	}
+}
+
+export interface PublishedEventData {
+	socketId?: string
+	[key: string]: any
+}
+
 export interface PusherEvent {
 	name: string
 	event: string
 	channel: string
-	data: WebSocketData
+	data: SubscriptionData & PublishedEventData
 }
 
 export const WebSocketReadyState = { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 } as const
@@ -31,5 +46,5 @@ export interface Channels {
 			user_info: Record<string, any>
 			sockets: Set<string>
 		}
-	}
+	} | undefined
 }

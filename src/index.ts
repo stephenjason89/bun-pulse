@@ -7,7 +7,7 @@ import {
 	handleWebSocketMessage,
 	handleWebSocketUpgrade,
 	initializeWebSocketConnection,
-	unsubscribeFromChannel,
+	unsubscribeFromAllChannels,
 } from './websocket'
 
 interface BunPulseConfig {
@@ -43,8 +43,8 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 				})
 			},
 			close(ws, code, reason) {
-				consola.info(`Connection closed for Socket ID: ${ws.data.socketId}, Channel: ${ws.data.channel || 'No channel'}`)
-				unsubscribeFromChannel(ws, ws.data.channel, server, subscriptionVacancyUrl)
+				consola.info(`Connection closed for Socket ID: ${ws.data.socketId}, Channels: ${ws.data.subscribedChannels.join(', ') || 'No channels'}`)
+				unsubscribeFromAllChannels(ws, server, subscriptionVacancyUrl)
 				axiom.log('pusher_connection:close', {
 					app: { id: import.meta.env.PUSHER_APP_ID },
 					close: { code, reason },
