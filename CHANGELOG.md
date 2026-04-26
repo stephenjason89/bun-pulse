@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/stephenjason89/bun-pulse/compare/v1.5.1...v1.5.2) (2026-04-26)
+
+### 🐛 Bug Fixes
+
+* improve channel subscription cleanup ([c75713b](https://github.com/stephenjason89/bun-pulse/commit/c75713b6f4597fad8643ba8c6dd40856827d330d))
+
 ## [1.5.1](https://github.com/stephenjason89/bun-pulse/compare/v1.5.0...v1.5.1) (2024-12-03)
 
 ### 🐛 Bug Fixes
