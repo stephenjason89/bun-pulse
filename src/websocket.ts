@@ -1,6 +1,6 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
-import type { Channels, PusherEvent, WebSocketData } from './types'
+import type { Channels, PusherEvent, SubscriptionData, WebSocketData } from './types'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
 import {
@@ -58,6 +58,7 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 			client: urlParams.get('client') || 'N/A',
 			version: urlParams.get('version') || 'N/A',
 			protocol: urlParams.get('protocol') || 'N/A',
+			subscribedChannels: [],
 		},
 	})
 
@@ -130,9 +131,14 @@ export async function handleEventPublishing(req: Request, server: Server) {
 }
 
 // Subscribes the WebSocket to a channel
-function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: WebSocketData, server: Server) {
+function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: SubscriptionData, server: Server) {
 	const isRestrictedChannel = /^(?:private-|presence-)/.test(subscriptionData.channel)
 	const isPresenceChannel = getChannelType(subscriptionData.channel) === 'presence'
+	const channelData: Extract<SubscriptionData['channel_data'], object> = typeof subscriptionData.channel_data === 'string'
+		? JSON.parse(subscriptionData.channel_data || '{}')
+		: (subscriptionData.channel_data ?? {})
+	const user_id = channelData.user_id
+	const user_info = channelData.user_info || {}
 
 	if (isRestrictedChannel && !isAuthorized(ws.data.socketId, subscriptionData)) {
 		ws.send(
@@ -149,15 +155,6 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		return
 	}
 
-	Object.assign(ws.data, subscriptionData)
-	ws.subscribe(subscriptionData.channel)
-
-	const channelData: Extract<WebSocketData['channel_data'], object> = typeof ws.data.channel_data === 'string'
-		? JSON.parse(ws.data.channel_data || '{}')
-		: (ws.data.channel_data ?? {})
-	const user_id = channelData.user_id
-	const user_info = channelData.user_info || {}
-
 	// Ensure user_id is present for presence channels
 	if (isPresenceChannel && !user_id) {
 		ws.send(JSON.stringify({
@@ -167,6 +164,14 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		ws.close()
 		return
 	}
+
+	const { channel, auth = '', channel_data } = subscriptionData
+	Object.assign(ws.data, { channel, auth, channel_data })
+
+	if (!ws.data.subscribedChannels.includes(subscriptionData.channel)) {
+		ws.data.subscribedChannels.push(subscriptionData.channel)
+	}
+	ws.subscribe(subscriptionData.channel)
 
 	if (!channels[subscriptionData.channel]) {
 		channels[subscriptionData.channel] = {}
@@ -195,7 +200,7 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 				channel: { name: subscriptionData.channel, type: getChannelType(subscriptionData.channel) },
 				broadcast: {
 					event: 'pusher_internal:member_added',
-					sockedId: subscriptionData.socketId,
+					sockedId: ws.data.socketId,
 					duration: Date.now() - startTime,
 					connections: getChannelConnections(subscriptionData.channel, channels),
 				},
@@ -226,17 +231,22 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 	if (!channel)
 		return
 	ws.unsubscribe(channel)
+	ws.data.subscribedChannels = ws.data.subscribedChannels.filter(subscribedChannel => subscribedChannel !== channel)
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 
-	const user_id = Object.keys(channels[channel]).find(id => channels[channel][id].sockets.has(ws.data.socketId))
+	const channelMembers = channels[channel]
+	if (!channelMembers)
+		return
+
+	const user_id = Object.keys(channelMembers).find(id => channelMembers[id].sockets.has(ws.data.socketId))
 
 	if (user_id) {
-		const user = channels[channel][user_id]
+		const user = channelMembers[user_id]
 		user.sockets.delete(ws.data.socketId)
 
 		// If no more sockets for this user_id, remove user and fire `member_removed`
 		if (user.sockets.size === 0) {
-			delete channels[channel][user_id]
+			delete channelMembers[user_id]
 			if (getChannelType(channel) === 'presence') {
 				const startTime = Date.now()
 				server.publish(channel, JSON.stringify({
@@ -257,13 +267,21 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 			}
 
 			// If the channel is now empty, trigger the vacancy notification
-			if (Object.keys(channels[channel]).length === 0) {
+			if (Object.keys(channelMembers).length === 0) {
 				delete channels[channel]
 				if (subscriptionVacancyUrl) {
 					notifyChannelVacancy(channel, subscriptionVacancyUrl)
 				}
 			}
 		}
+	}
+}
+
+export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, subscriptionVacancyUrl: string) {
+	const subscribedChannels = ws.data.subscribedChannels
+
+	for (const channel of [...subscribedChannels]) {
+		unsubscribeFromChannel(ws, channel, server, subscriptionVacancyUrl)
 	}
 }
 
@@ -332,7 +350,7 @@ async function notifyChannelVacancy(channel: string, subscriptionVacancyUrl: str
 }
 
 // Authorizes WebSocket connections
-export function isAuthorized(socketId: string, data: WebSocketData): boolean {
+export function isAuthorized(socketId: string, data: SubscriptionData): boolean {
 	const sha256 = generateHmacSHA256HexDigest(`${socketId}:${data.channel}`, String(import.meta.env.PUSHER_APP_SECRET))
 	return data.auth === `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
 }
