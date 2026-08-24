@@ -122,7 +122,7 @@ You can customize **BunPulse** by passing configuration options when starting th
 
 - `*`: All bun websocket server options are supported, see [bun docs](https://bun.sh/docs/api/http#bun-serve) for more info.
 - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
-- `subscriptionVacancyUrl`: An optional URL to notify when a channel is vacated (i.e., no more subscribers).
+- `webhookUrl`: An optional URL that receives Pusher-compatible channel and presence webhooks.
 - `heartbeatInterval`: The interval (in milliseconds) at which WebSocket heartbeat pings are sent to keep the connection alive (default: `25000`).
 - `heartbeatTimeout`: The timeout (in milliseconds) after which an inactive WebSocket connection is closed (default: `60000`).
 
@@ -131,11 +131,31 @@ You can customize **BunPulse** by passing configuration options when starting th
 ```typescript
 const server = startBunPulse({
 	port: 7000,
-	subscriptionVacancyUrl: 'https://myserver.com/api/subscriptions/webhook',
+	webhookUrl: 'https://myserver.com/api/subscriptions/webhook',
 	heartbeatInterval: 20000, // Heartbeat every 20 seconds
 	heartbeatTimeout: 50000 // Timeout after 50 seconds of inactivity
 })
 ```
+
+## Webhooks
+
+When `webhookUrl` is configured, BunPulse sends `channel_occupied`, `channel_vacated`, `member_added`, and `member_removed` events. Presence events include a `user_id`. Disconnect events wait one second before delivery so a quick reconnect can cancel them.
+
+Each request uses the Pusher webhook format:
+
+```json
+{
+	"time_ms": 1724472000000,
+	"events": [
+		{
+			"name": "channel_vacated",
+			"channel": "private-orders"
+		}
+	]
+}
+```
+
+BunPulse signs the exact JSON request body with `PUSHER_APP_SECRET`. The request includes `X-Pusher-Key` and `X-Pusher-Signature` headers. Failed requests are retried with exponential backoff for up to five minutes.
 
 ## Authentication
 
@@ -232,7 +252,7 @@ Starts the BunPulse WebSocket server.
 **Arguments**:
 - `config` (optional): An object containing configuration options such as:
     - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
-    - `subscriptionVacancyUrl`: URL to notify when a channel is vacated.
+    - `webhookUrl`: URL for Pusher-compatible webhook events.
     - `heartbeatInterval`: Interval for WebSocket heartbeats.
     - `heartbeatTimeout`: Timeout period for inactive WebSocket connections.
 
@@ -297,11 +317,8 @@ We welcome contributions to **BunPulse**! If you're interested in improving the 
       - Define and return more detailed error messages (`pusher:error` events).
       - Add more robust error handling mechanisms for connection issues and HTTP failures.
 
-5. **Webhook Support**:
-    - **Goal**: Enhance existing webhook functionality for key events.
-    - **What’s Needed**:
-        - Extend webhook support to cover additional events such as `channel_occupied` and other relevant events as needed.
-        - Ensure robust error handling and logging for webhook notifications to improve reliability.
+5. **Client Event Webhooks**:
+    - **Goal**: Send `client_event` webhooks after client-side events are supported.
 ---
 
 ### How to Contribute:

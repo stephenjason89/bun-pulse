@@ -2,6 +2,7 @@ import type { ServeOptions, ServerWebSocket } from 'bun'
 import type { WebSocketData } from './types'
 import { consola } from 'consola'
 import { axiom } from './utils'
+import { createWebhookDispatcher } from './webhook'
 import {
 	handleEventPublishing,
 	handleWebSocketMessage,
@@ -11,7 +12,7 @@ import {
 } from './websocket'
 
 interface BunPulseConfig {
-	subscriptionVacancyUrl?: string
+	webhookUrl?: string
 	heartbeat?: {
 		interval?: number
 		timeout?: number
@@ -20,8 +21,9 @@ interface BunPulseConfig {
 }
 
 export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = { port: 6001 }) {
-	const { subscriptionVacancyUrl, heartbeat = {}, ...serverOptions } = config
+	const { webhookUrl, heartbeat = {}, ...serverOptions } = config
 	const finalHeartbeat = { interval: 25000, timeout: 60000, sendPing: false, ...heartbeat }
+	const webhookDispatcher = createWebhookDispatcher(webhookUrl)
 
 	const server = Bun.serve({
 		...serverOptions,
@@ -33,7 +35,7 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 		},
 		websocket: {
 			message(ws: ServerWebSocket<WebSocketData>, message) {
-				handleWebSocketMessage(ws, message, server, subscriptionVacancyUrl)
+				handleWebSocketMessage(ws, message, server, webhookDispatcher)
 			},
 			open: (ws) => {
 				initializeWebSocketConnection(ws, finalHeartbeat)
@@ -44,7 +46,7 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 			},
 			close(ws, code, reason) {
 				consola.info(`Connection closed for Socket ID: ${ws.data.socketId}, Channels: ${ws.data.subscribedChannels.join(', ') || 'No channels'}`)
-				unsubscribeFromAllChannels(ws, server, subscriptionVacancyUrl)
+				unsubscribeFromAllChannels(ws, server, webhookDispatcher)
 				axiom.log('pusher_connection:close', {
 					app: { id: import.meta.env.PUSHER_APP_ID },
 					close: { code, reason },
