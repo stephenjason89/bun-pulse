@@ -38,6 +38,15 @@ export interface PusherEvent {
 	data: SubscriptionData & PublishedEventData
 }
 
+export type WebhookEvent = {
+	name: 'channel_occupied' | 'channel_vacated'
+	channel: string
+} | {
+	name: 'member_added' | 'member_removed'
+	channel: string
+	user_id: string
+}
+
 export const WebSocketReadyState = { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 } as const
 
 export interface Channels {

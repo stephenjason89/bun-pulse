@@ -1,6 +1,7 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
 import type { Channels, PusherEvent, SubscriptionData, WebSocketData } from './types'
+import type { WebhookDispatcher } from './webhook'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
 import {
@@ -11,9 +12,12 @@ import {
 	getChannelType,
 	messageLogger,
 } from './utils'
+import { createWebhookDispatcher, noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = {}
-const pendingVacatedWebhookTimeouts: Record<string, Timer> = {}
+const webhookDispatchersByUrl = new Map<string, WebhookDispatcher>()
+
+type WebhookTarget = string | WebhookDispatcher | undefined
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
@@ -73,7 +77,7 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 }
 
 // Handles incoming WebSocket messages
-export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, subscriptionVacancyUrl: string) {
+export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookTarget: WebhookTarget) {
 	try {
 		consola.info(`Message Received - Socket ID: ${ws.data.socketId}`)
 		const messageObj = JSON.parse(String(message)) as Omit<PusherEvent, 'channel'>
@@ -88,10 +92,10 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 				ws.data.lastPingPong = Date.now()
 				break
 			case 'pusher:subscribe':
-				subscribeToChannel(ws, messageObj.data, server)
+				subscribeToChannel(ws, messageObj.data, server, resolveWebhookDispatcher(webhookTarget))
 				break
 			case 'pusher:unsubscribe':
-				unsubscribeFromChannel(ws, messageObj.data.channel, server, subscriptionVacancyUrl)
+				unsubscribeFromChannel(ws, messageObj.data.channel, server, webhookTarget)
 				break
 			default:
 				consola.error(`Unhandled Event - Event: ${messageObj.event}`)
@@ -131,7 +135,7 @@ export async function handleEventPublishing(req: Request, server: Server) {
 }
 
 // Subscribes the WebSocket to a channel
-function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: SubscriptionData, server: Server) {
+function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData: SubscriptionData, server: Server, webhookDispatcher: WebhookDispatcher) {
 	const isRestrictedChannel = /^(?:private-|presence-)/.test(subscriptionData.channel)
 	const isPresenceChannel = getChannelType(subscriptionData.channel) === 'presence'
 	const channelData: Extract<SubscriptionData['channel_data'], object> = typeof subscriptionData.channel_data === 'string'
@@ -167,53 +171,65 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 
 	const { channel, auth = '', channel_data } = subscriptionData
 	Object.assign(ws.data, { channel, auth, channel_data })
+	const canceledVacancy = webhookDispatcher.cancel(channelVacatedWebhookKey(channel))
 
-	if (!ws.data.subscribedChannels.includes(subscriptionData.channel)) {
-		ws.data.subscribedChannels.push(subscriptionData.channel)
+	if (!ws.data.subscribedChannels.includes(channel)) {
+		ws.data.subscribedChannels.push(channel)
 	}
-	ws.subscribe(subscriptionData.channel)
+	ws.subscribe(channel)
 
-	if (!channels[subscriptionData.channel]) {
-		channels[subscriptionData.channel] = {}
+	if (!channels[channel]) {
+		channels[channel] = {}
+		if (!canceledVacancy) {
+			webhookDispatcher.send({ name: 'channel_occupied', channel })
+		}
 	}
 
-	const user = channels[subscriptionData.channel][user_id ?? 'guest']
+	const user = channels[channel][user_id ?? 'guest']
 
 	if (user) {
 		// Add this socket to the user's existing connections
 		user.sockets.add(ws.data.socketId)
 	}
 	else {
+		const canceledMemberRemoval = isPresenceChannel
+			? webhookDispatcher.cancel(memberRemovedWebhookKey(channel, user_id as string))
+			: false
+
 		// New user for this channel
-		channels[subscriptionData.channel][user_id ?? 'guest'] = { user_info, sockets: new Set([ws.data.socketId]) }
+		channels[channel][user_id ?? 'guest'] = { user_info, sockets: new Set([ws.data.socketId]) }
 
 		// Notify all members of the new member joining
 		if (isPresenceChannel) {
 			const startTime = Date.now()
-			server.publish(subscriptionData.channel, JSON.stringify({
+			server.publish(channel, JSON.stringify({
 				event: 'pusher_internal:member_added',
-				channel: subscriptionData.channel,
+				channel,
 				data: JSON.stringify({ user_id, user_info }),
 			}))
 			axiom.log('pusher_channel:broadcast', {
 				app: { id: import.meta.env.PUSHER_APP_ID },
-				channel: { name: subscriptionData.channel, type: getChannelType(subscriptionData.channel) },
+				channel: { name: channel, type: getChannelType(channel) },
 				broadcast: {
 					event: 'pusher_internal:member_added',
 					sockedId: ws.data.socketId,
 					duration: Date.now() - startTime,
-					connections: getChannelConnections(subscriptionData.channel, channels),
+					connections: getChannelConnections(channel, channels),
 				},
 			})
+
+			if (!canceledMemberRemoval) {
+				webhookDispatcher.send({ name: 'member_added', channel, user_id: user_id as string })
+			}
 		}
 	}
 
 	// Send the initial list of users to the new member
-	const members = isPresenceChannel ? Object.values(channels[subscriptionData.channel]).map(({ user_info }, user_id) => ({ user_id, user_info })) : undefined
+	const members = isPresenceChannel ? Object.values(channels[channel]).map(({ user_info }, user_id) => ({ user_id, user_info })) : undefined
 
 	ws.send(JSON.stringify({
 		event: 'pusher_internal:subscription_succeeded',
-		channel: subscriptionData.channel,
+		channel,
 		...(isPresenceChannel && { data: JSON.stringify({
 			presence: {
 				count: members.length,
@@ -223,13 +239,14 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		}) }),
 	}))
 
-	consola.success(`Subscribed - Socket ID: ${ws.data.socketId}, Channel: ${subscriptionData.channel}`)
+	consola.success(`Subscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 }
 
 // Unsubscribes the WebSocket from a channel
-export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, channel: string, server: Server, subscriptionVacancyUrl: string) {
+export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, channel: string, server: Server, webhookTarget: WebhookTarget) {
 	if (!channel)
 		return
+	const webhookDispatcher = resolveWebhookDispatcher(webhookTarget)
 	ws.unsubscribe(channel)
 	ws.data.subscribedChannels = ws.data.subscribedChannels.filter(subscribedChannel => subscribedChannel !== channel)
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
@@ -264,89 +281,46 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 						connections: getChannelConnections(channel, channels),
 					},
 				})
+				webhookDispatcher.schedule(memberRemovedWebhookKey(channel, user_id), { name: 'member_removed', channel, user_id })
 			}
 
 			// If the channel is now empty, trigger the vacancy notification
 			if (Object.keys(channelMembers).length === 0) {
 				delete channels[channel]
-				if (subscriptionVacancyUrl) {
-					notifyChannelVacancy(channel, subscriptionVacancyUrl)
-				}
+				webhookDispatcher.schedule(channelVacatedWebhookKey(channel), { name: 'channel_vacated', channel })
 			}
 		}
 	}
 }
 
-export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, subscriptionVacancyUrl: string) {
+export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, webhookTarget: WebhookTarget) {
 	const subscribedChannels = ws.data.subscribedChannels
 
 	for (const channel of [...subscribedChannels]) {
-		unsubscribeFromChannel(ws, channel, server, subscriptionVacancyUrl)
+		unsubscribeFromChannel(ws, channel, server, webhookTarget)
 	}
 }
 
-// Notifies that a channel has been vacated
-async function notifyChannelVacancy(channel: string, subscriptionVacancyUrl: string, retries = 3, delay = 1000) {
-	const payload = JSON.stringify({ events: [{ name: 'channel_vacated', channel }] })
+function resolveWebhookDispatcher(target: WebhookTarget): WebhookDispatcher {
+	if (!target)
+		return noOpWebhookDispatcher
+	if (typeof target !== 'string')
+		return target
 
-	// Check if PUSHER_APP_SECRET and PUSHER_APP_KEY are defined
-	const secret = import.meta.env.PUSHER_APP_SECRET
-	const appKey = import.meta.env.PUSHER_APP_KEY
-
-	if (!secret || !appKey) {
-		consola.error('Missing PUSHER_APP_SECRET or PUSHER_APP_KEY. Skipping webhook notification.')
-		return
+	let dispatcher = webhookDispatchersByUrl.get(target)
+	if (!dispatcher) {
+		dispatcher = createWebhookDispatcher(target)
+		webhookDispatchersByUrl.set(target, dispatcher)
 	}
+	return dispatcher
+}
 
-	// Clear any existing pending webhook for this channel to avoid duplicate requests
-	if (pendingVacatedWebhookTimeouts[channel]) {
-		clearTimeout(pendingVacatedWebhookTimeouts[channel])
-		delete pendingVacatedWebhookTimeouts[channel]
-	}
+function channelVacatedWebhookKey(channel: string) {
+	return JSON.stringify(['channel_vacated', channel])
+}
 
-	// Set up a delayed webhook notification
-	pendingVacatedWebhookTimeouts[channel] = setTimeout(async () => {
-		for (let attempt = 0; attempt <= retries; attempt++) {
-			try {
-				const response = await fetch(subscriptionVacancyUrl, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'X-Pusher-Signature': generateHmacSHA256HexDigest(payload, secret),
-						'X-Pusher-Key': appKey,
-					},
-					body: payload,
-				})
-
-				if (response.ok) {
-					consola.success(`Channel Vacated - Channel: ${channel}`)
-					delete pendingVacatedWebhookTimeouts[channel]
-					return
-				}
-				else {
-					const errorText = await response.text()
-					consola.error(`Channel Vacancy Error - Status: ${response.status}, Error: ${errorText}`)
-
-					if (response.status >= 400 && response.status < 500) {
-						// Do not retry for 4xx errors (client-side)
-						consola.error('Client error occurred, not retrying...')
-						break
-					}
-				}
-			}
-			catch (error) {
-				consola.error(`Vacancy Notification Error - Channel: ${channel}, Attempt: ${attempt + 1}, Error: ${error.message}`)
-			}
-
-			// Retry with exponential backoff
-			const backoffTime = delay * 2 ** attempt
-			consola.info(`Retrying in ${backoffTime}ms...`)
-			await new Promise(resolve => setTimeout(resolve, backoffTime))
-		}
-
-		consola.error(`Failed to notify channel vacancy after ${retries + 1} attempts - Channel: ${channel}`)
-		delete pendingVacatedWebhookTimeouts[channel]
-	}, 1000)
+function memberRemovedWebhookKey(channel: string, userId: string) {
+	return JSON.stringify(['member_removed', channel, userId])
 }
 
 // Authorizes WebSocket connections

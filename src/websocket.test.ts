@@ -1,6 +1,30 @@
+import type { WebhookEvent } from './types'
+import type { WebhookDispatcher } from './webhook'
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { handleEventPublishing, handleWebSocketMessage, initializeWebSocketConnection, unsubscribeFromAllChannels, unsubscribeFromChannel } from './websocket'
 import * as websocketModule from './websocket'
+
+function createWebhookRecorder() {
+	const sent: WebhookEvent[] = []
+	const pending = new Map<string, WebhookEvent>()
+	const dispatcher: WebhookDispatcher = {
+		send: mock((event: WebhookEvent) => sent.push(event)),
+		schedule: mock((key: string, event: WebhookEvent) => pending.set(key, event)),
+		cancel: mock((key: string) => pending.delete(key)),
+	}
+
+	return { dispatcher, pending, sent }
+}
+
+function createSocket(socketId: string) {
+	return {
+		send: mock(() => {}),
+		close: mock(() => {}),
+		subscribe: mock(() => {}),
+		unsubscribe: mock(() => {}),
+		data: { socketId, subscribedChannels: [] as string[] },
+	}
+}
 
 describe('BunPulse WebSocket Tests', () => {
 	beforeEach(() => {
@@ -163,6 +187,125 @@ describe('BunPulse WebSocket Tests', () => {
 		expect(wsMock.unsubscribe).toHaveBeenCalledWith('first-channel')
 		expect(wsMock.unsubscribe).toHaveBeenCalledWith('second-channel')
 		expect(wsMock.data.subscribedChannels).toEqual([])
+	})
+
+	it('emits channel occupancy events only on empty-channel transitions', () => {
+		const firstSocket = createSocket('occupied-first')
+		const secondSocket = createSocket('occupied-second')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+		const channel = 'occupied-transition-channel'
+
+		for (const socket of [firstSocket, secondSocket]) {
+			handleWebSocketMessage(
+				socket as any,
+				JSON.stringify({ event: 'pusher:subscribe', data: { channel } }),
+				server as any,
+				webhook.dispatcher,
+			)
+		}
+
+		expect(webhook.sent).toEqual([{ name: 'channel_occupied', channel }])
+		unsubscribeFromChannel(firstSocket as any, channel, server as any, webhook.dispatcher)
+		expect(webhook.pending.size).toBe(0)
+		unsubscribeFromChannel(secondSocket as any, channel, server as any, webhook.dispatcher)
+		expect([...webhook.pending.values()]).toEqual([{ name: 'channel_vacated', channel }])
+	})
+
+	it('suppresses vacancy and duplicate occupancy webhooks on a quick re-subscribe', () => {
+		const firstSocket = createSocket('vacancy-first')
+		const secondSocket = createSocket('vacancy-second')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+		const channel = 'vacancy-reconnect-channel'
+
+		handleWebSocketMessage(firstSocket as any, JSON.stringify({ event: 'pusher:subscribe', data: { channel } }), server as any, webhook.dispatcher)
+		unsubscribeFromChannel(firstSocket as any, channel, server as any, webhook.dispatcher)
+		expect(webhook.pending.size).toBe(1)
+
+		handleWebSocketMessage(secondSocket as any, JSON.stringify({ event: 'pusher:subscribe', data: { channel } }), server as any, webhook.dispatcher)
+
+		expect(webhook.pending.size).toBe(0)
+		expect(webhook.sent).toEqual([{ name: 'channel_occupied', channel }])
+	})
+
+	it('emits presence webhooks only for the first and last socket of a user', () => {
+		const firstSocket = createSocket('presence-first')
+		const secondSocket = createSocket('presence-second')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+		const channel = 'presence-member-lifecycle'
+		const subscription = JSON.stringify({
+			event: 'pusher:subscribe',
+			data: { channel, channel_data: JSON.stringify({ user_id: 'user-1', user_info: { name: 'Ada' } }) },
+		})
+
+		handleWebSocketMessage(firstSocket as any, subscription, server as any, webhook.dispatcher)
+		handleWebSocketMessage(secondSocket as any, subscription, server as any, webhook.dispatcher)
+		expect(webhook.sent).toEqual([
+			{ name: 'channel_occupied', channel },
+			{ name: 'member_added', channel, user_id: 'user-1' },
+		])
+
+		unsubscribeFromChannel(firstSocket as any, channel, server as any, webhook.dispatcher)
+		expect(webhook.pending.size).toBe(0)
+		unsubscribeFromChannel(secondSocket as any, channel, server as any, webhook.dispatcher)
+		expect([...webhook.pending.values()]).toEqual([
+			{ name: 'member_removed', channel, user_id: 'user-1' },
+			{ name: 'channel_vacated', channel },
+		])
+	})
+
+	it('suppresses presence removal and duplicate addition when the same user reconnects', () => {
+		const firstSocket = createSocket('presence-reconnect-first')
+		const secondSocket = createSocket('presence-reconnect-second')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+		const channel = 'presence-member-reconnect'
+		const subscription = JSON.stringify({
+			event: 'pusher:subscribe',
+			data: { channel, channel_data: JSON.stringify({ user_id: 'user-1' }) },
+		})
+
+		handleWebSocketMessage(firstSocket as any, subscription, server as any, webhook.dispatcher)
+		unsubscribeFromChannel(firstSocket as any, channel, server as any, webhook.dispatcher)
+		expect(webhook.pending.size).toBe(2)
+
+		handleWebSocketMessage(secondSocket as any, subscription, server as any, webhook.dispatcher)
+
+		expect(webhook.pending.size).toBe(0)
+		expect(webhook.sent).toEqual([
+			{ name: 'channel_occupied', channel },
+			{ name: 'member_added', channel, user_id: 'user-1' },
+		])
+	})
+
+	it('keeps the old member removal when a different user reoccupies a presence channel', () => {
+		const firstSocket = createSocket('presence-different-first')
+		const secondSocket = createSocket('presence-different-second')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+		const channel = 'presence-different-user'
+
+		handleWebSocketMessage(firstSocket as any, JSON.stringify({
+			event: 'pusher:subscribe',
+			data: { channel, channel_data: JSON.stringify({ user_id: 'user-1' }) },
+		}), server as any, webhook.dispatcher)
+		unsubscribeFromChannel(firstSocket as any, channel, server as any, webhook.dispatcher)
+
+		handleWebSocketMessage(secondSocket as any, JSON.stringify({
+			event: 'pusher:subscribe',
+			data: { channel, channel_data: JSON.stringify({ user_id: 'user-2' }) },
+		}), server as any, webhook.dispatcher)
+
+		expect([...webhook.pending.values()]).toEqual([
+			{ name: 'member_removed', channel, user_id: 'user-1' },
+		])
+		expect(webhook.sent).toEqual([
+			{ name: 'channel_occupied', channel },
+			{ name: 'member_added', channel, user_id: 'user-1' },
+			{ name: 'member_added', channel, user_id: 'user-2' },
+		])
 	})
 
 	// Test Event Publishing
