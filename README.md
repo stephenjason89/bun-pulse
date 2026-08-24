@@ -123,7 +123,6 @@ You can customize **BunPulse** by passing configuration options when starting th
 - `*`: All bun websocket server options are supported, see [bun docs](https://bun.sh/docs/api/http#bun-serve) for more info.
 - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
 - `webhookUrl`: An optional URL that receives Pusher-compatible channel and presence webhooks.
-- `subscriptionVacancyUrl`: Deprecated alias for `webhookUrl`. Existing configurations continue to work.
 - `heartbeatInterval`: The interval (in milliseconds) at which WebSocket heartbeat pings are sent to keep the connection alive (default: `25000`).
 - `heartbeatTimeout`: The timeout (in milliseconds) after which an inactive WebSocket connection is closed (default: `60000`).
 
@@ -254,7 +253,6 @@ Starts the BunPulse WebSocket server.
 - `config` (optional): An object containing configuration options such as:
     - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
     - `webhookUrl`: URL for Pusher-compatible webhook events.
-    - `subscriptionVacancyUrl`: Deprecated alias for `webhookUrl`.
     - `heartbeatInterval`: Interval for WebSocket heartbeats.
     - `heartbeatTimeout`: Timeout period for inactive WebSocket connections.
 

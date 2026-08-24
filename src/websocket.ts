@@ -12,12 +12,9 @@ import {
 	getChannelType,
 	messageLogger,
 } from './utils'
-import { createWebhookDispatcher, noOpWebhookDispatcher } from './webhook'
+import { noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = {}
-const webhookDispatchersByUrl = new Map<string, WebhookDispatcher>()
-
-type WebhookTarget = string | WebhookDispatcher | undefined
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
@@ -77,7 +74,7 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 }
 
 // Handles incoming WebSocket messages
-export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookTarget: WebhookTarget) {
+export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
 	try {
 		consola.info(`Message Received - Socket ID: ${ws.data.socketId}`)
 		const messageObj = JSON.parse(String(message)) as Omit<PusherEvent, 'channel'>
@@ -92,10 +89,10 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 				ws.data.lastPingPong = Date.now()
 				break
 			case 'pusher:subscribe':
-				subscribeToChannel(ws, messageObj.data, server, resolveWebhookDispatcher(webhookTarget))
+				subscribeToChannel(ws, messageObj.data, server, webhookDispatcher)
 				break
 			case 'pusher:unsubscribe':
-				unsubscribeFromChannel(ws, messageObj.data.channel, server, webhookTarget)
+				unsubscribeFromChannel(ws, messageObj.data.channel, server, webhookDispatcher)
 				break
 			default:
 				consola.error(`Unhandled Event - Event: ${messageObj.event}`)
@@ -243,10 +240,9 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 }
 
 // Unsubscribes the WebSocket from a channel
-export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, channel: string, server: Server, webhookTarget: WebhookTarget) {
+export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, channel: string, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
 	if (!channel)
 		return
-	const webhookDispatcher = resolveWebhookDispatcher(webhookTarget)
 	ws.unsubscribe(channel)
 	ws.data.subscribedChannels = ws.data.subscribedChannels.filter(subscribedChannel => subscribedChannel !== channel)
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
@@ -293,26 +289,12 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 	}
 }
 
-export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, webhookTarget: WebhookTarget) {
+export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
 	const subscribedChannels = ws.data.subscribedChannels
 
 	for (const channel of [...subscribedChannels]) {
-		unsubscribeFromChannel(ws, channel, server, webhookTarget)
+		unsubscribeFromChannel(ws, channel, server, webhookDispatcher)
 	}
-}
-
-function resolveWebhookDispatcher(target: WebhookTarget): WebhookDispatcher {
-	if (!target)
-		return noOpWebhookDispatcher
-	if (typeof target !== 'string')
-		return target
-
-	let dispatcher = webhookDispatchersByUrl.get(target)
-	if (!dispatcher) {
-		dispatcher = createWebhookDispatcher(target)
-		webhookDispatchersByUrl.set(target, dispatcher)
-	}
-	return dispatcher
 }
 
 function channelVacatedWebhookKey(channel: string) {

@@ -58,7 +58,7 @@ describe('BunPulse WebSocket Tests', () => {
 			data: { socketId: 'socket-123', lastPingPong: Date.now() },
 		}
 
-		handleWebSocketMessage(wsMock as any, JSON.stringify({ event: 'pusher:ping' }), {} as any, '')
+		handleWebSocketMessage(wsMock as any, JSON.stringify({ event: 'pusher:ping' }), {} as any)
 
 		expect(wsMock.send).toHaveBeenCalledWith(JSON.stringify({ event: 'pusher:pong' }))
 		expect(wsMock.send).toHaveBeenCalledTimes(1)
@@ -84,7 +84,6 @@ describe('BunPulse WebSocket Tests', () => {
 				data: { channel: 'test-channel' },
 			}),
 			mockServer as any,
-			'',
 		)
 
 		expect(wsMock.subscribe).toHaveBeenCalledWith('test-channel')
@@ -111,7 +110,6 @@ describe('BunPulse WebSocket Tests', () => {
 				data: { channel: 'presence-test-channel', channel_data: JSON.stringify({ user_info: { name: 'Ada' } }) },
 			}),
 			{ publish: mock(() => {}) } as any,
-			'',
 		)
 
 		expect(wsMock.subscribe).not.toHaveBeenCalled()
@@ -129,7 +127,7 @@ describe('BunPulse WebSocket Tests', () => {
 			data: { socketId: 'socket-456', subscribedChannels: [] },
 		}
 
-		expect(() => unsubscribeFromChannel(wsMock as any, 'missing-channel', {} as any, '')).not.toThrow()
+		expect(() => unsubscribeFromChannel(wsMock as any, 'missing-channel', {} as any)).not.toThrow()
 		expect(wsMock.unsubscribe).toHaveBeenCalledWith('missing-channel')
 	})
 
@@ -149,11 +147,10 @@ describe('BunPulse WebSocket Tests', () => {
 				data: { channel: 'duplicate-unsubscribe-channel' },
 			}),
 			{ publish: mock(() => {}) } as any,
-			'',
 		)
 
-		unsubscribeFromChannel(wsMock as any, 'duplicate-unsubscribe-channel', {} as any, '')
-		expect(() => unsubscribeFromChannel(wsMock as any, 'duplicate-unsubscribe-channel', {} as any, '')).not.toThrow()
+		unsubscribeFromChannel(wsMock as any, 'duplicate-unsubscribe-channel', {} as any)
+		expect(() => unsubscribeFromChannel(wsMock as any, 'duplicate-unsubscribe-channel', {} as any)).not.toThrow()
 		expect(wsMock.unsubscribe).toHaveBeenCalledTimes(2)
 		expect(wsMock.data.subscribedChannels).toEqual([])
 	})
@@ -176,13 +173,12 @@ describe('BunPulse WebSocket Tests', () => {
 					data: { channel },
 				}),
 				mockServer as any,
-				'',
 			)
 		}
 
 		expect(wsMock.data.subscribedChannels).toEqual(['first-channel', 'second-channel'])
 
-		unsubscribeFromAllChannels(wsMock as any, mockServer as any, '')
+		unsubscribeFromAllChannels(wsMock as any, mockServer as any)
 
 		expect(wsMock.unsubscribe).toHaveBeenCalledWith('first-channel')
 		expect(wsMock.unsubscribe).toHaveBeenCalledWith('second-channel')

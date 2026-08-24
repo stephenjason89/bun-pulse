@@ -13,8 +13,6 @@ import {
 
 interface BunPulseConfig {
 	webhookUrl?: string
-	/** @deprecated Use webhookUrl instead. */
-	subscriptionVacancyUrl?: string
 	heartbeat?: {
 		interval?: number
 		timeout?: number
@@ -23,16 +21,9 @@ interface BunPulseConfig {
 }
 
 export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = { port: 6001 }) {
-	const { webhookUrl, subscriptionVacancyUrl, heartbeat = {}, ...serverOptions } = config
+	const { webhookUrl, heartbeat = {}, ...serverOptions } = config
 	const finalHeartbeat = { interval: 25000, timeout: 60000, sendPing: false, ...heartbeat }
-	const resolvedWebhookUrl = webhookUrl ?? subscriptionVacancyUrl
-	const webhookDispatcher = createWebhookDispatcher(resolvedWebhookUrl)
-
-	if (subscriptionVacancyUrl) {
-		consola.warn(webhookUrl
-			? 'subscriptionVacancyUrl is deprecated and ignored because webhookUrl is configured.'
-			: 'subscriptionVacancyUrl is deprecated. Use webhookUrl instead.')
-	}
+	const webhookDispatcher = createWebhookDispatcher(webhookUrl)
 
 	const server = Bun.serve({
 		...serverOptions,
