@@ -1,3 +1,13 @@
+## [2.0.0](https://github.com/stephenjason89/bun-pulse/compare/v1.5.2...v2.0.0) (2026-08-25)
+
+### ⚠ BREAKING CHANGES
+
+* Replace subscriptionVacancyUrl with webhookUrl.
+
+### 🚀 Features
+
+* add Pusher-compatible webhooks ([220f264](https://github.com/stephenjason89/bun-pulse/commit/220f26477fc9e3496c6d4e5716f251b2d3337fec))
+
 ## [1.5.2](https://github.com/stephenjason89/bun-pulse/compare/v1.5.1...v1.5.2) (2026-04-26)
 
 ### 🐛 Bug Fixes
