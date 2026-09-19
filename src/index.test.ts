@@ -18,6 +18,8 @@ afterEach(() => {
 
 describe('startBunPulse', () => {
 	it('rejects startup when either app credential is missing', () => {
+		spyOn(Bun, 'serve').mockReturnValue({ hostname: 'localhost', port: 6001 } as any)
+
 		for (const missing of ['PUSHER_APP_KEY', 'PUSHER_APP_SECRET'] as const) {
 			process.env.PUSHER_APP_KEY = 'app-key'
 			process.env.PUSHER_APP_SECRET = 'app-secret'
