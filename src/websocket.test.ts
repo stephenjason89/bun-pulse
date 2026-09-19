@@ -9,6 +9,7 @@ const originalAppKey = process.env.PUSHER_APP_KEY
 const originalAppSecret = process.env.PUSHER_APP_SECRET
 
 afterEach(() => {
+	mock.restore()
 	if (originalAppKey === undefined)
 		delete process.env.PUSHER_APP_KEY
 	else
@@ -416,5 +417,21 @@ describe('BunPulse WebSocket Tests', () => {
 
 		expect(response.status).toBe(200)
 		expect(server.publish.mock.calls.map(([channel]) => channel)).toEqual(['private-orders', 'private-dashboard'])
+	})
+
+	it('rejects malformed publish payloads before broadcasting', async () => {
+		for (const body of [
+			{ name: 'order.updated', channels: 'private-orders', data: '{}' },
+			{ name: 'order.updated', channels: ['private-orders'] },
+		]) {
+			const server = { publish: mock(() => {}) }
+			const response = await handleEventPublishing(new Request('http://localhost/apps/app-id/events', {
+				method: 'POST',
+				body: JSON.stringify(body),
+			}), server as any)
+
+			expect(response.status).toBe(400)
+			expect(server.publish).not.toHaveBeenCalled()
+		}
 	})
 })

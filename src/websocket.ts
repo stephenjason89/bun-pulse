@@ -1,6 +1,6 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
-import type { Channels, PusherEvent, SubscriptionData, WebSocketData } from './types'
+import type { Channels, PublishedEventData, PusherEvent, SubscriptionData, WebSocketData } from './types'
 import type { WebhookDispatcher } from './webhook'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
@@ -107,9 +107,9 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 // Handles event publishing for POST requests
 export async function handleEventPublishing(req: Request, server: Server) {
 	try {
-		const body = (await req.json()) as Omit<PusherEvent, 'channel'> & { channel?: string, channels?: string[] }
+		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown }
 		const eventChannels = body.channels ?? (body.channel ? [body.channel] : [])
-		if (!eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
+		if (typeof body.name !== 'string' || !body.name || (typeof body.data !== 'string' && (typeof body.data !== 'object' || body.data === null)) || !Array.isArray(eventChannels) || !eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
 			return new Response('Bad Request', { status: 400 })
 
 		for (const channel of eventChannels) {
@@ -122,7 +122,7 @@ export async function handleEventPublishing(req: Request, server: Server) {
 				channel: { name: channel, type: getChannelType(channel) },
 				broadcast: {
 					event: body.name,
-					sockedId: body.data.socketId,
+					sockedId: typeof body.data === 'string' ? undefined : (body.data as PublishedEventData).socketId,
 					duration: Date.now() - startTime,
 					connections: getChannelConnections(channel, channels),
 				},
