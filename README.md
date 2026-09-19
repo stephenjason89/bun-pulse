@@ -180,6 +180,8 @@ To set up **BunPulse** with Pusher-style authentication, configure the following
 - `PUSHER_APP_KEY`: Your Pusher app key (used for client authentication).
 - `PUSHER_APP_SECRET`: Your Pusher app secret (used for HMAC SHA256 signing).
 
+Both variables are required. BunPulse rejects startup when either is missing.
+
 Add these variables to your `.env` file or set them in your environment. Here's an example of the `.env` configuration:
 
 ```bash
