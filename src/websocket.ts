@@ -222,7 +222,7 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 	}
 
 	// Send the initial list of users to the new member
-	const members = isPresenceChannel ? Object.values(channels[channel]).map(({ user_info }, user_id) => ({ user_id, user_info })) : undefined
+	const members = isPresenceChannel ? Object.entries(channels[channel]).map(([user_id, { user_info }]) => ({ user_id, user_info })) : undefined
 
 	ws.send(JSON.stringify({
 		event: 'pusher_internal:subscription_succeeded',

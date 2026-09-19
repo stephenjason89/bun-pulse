@@ -20,12 +20,16 @@ interface BunPulseConfig {
 	}
 }
 
-export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = { port: 6001 }) {
+export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {}) {
+	if (!import.meta.env.PUSHER_APP_KEY || !import.meta.env.PUSHER_APP_SECRET)
+		throw new Error('PUSHER_APP_KEY and PUSHER_APP_SECRET are required')
+
 	const { webhookUrl, heartbeat = {}, ...serverOptions } = config
 	const finalHeartbeat = { interval: 25000, timeout: 60000, sendPing: false, ...heartbeat }
 	const webhookDispatcher = createWebhookDispatcher(webhookUrl)
 
 	const server = Bun.serve({
+		port: 6001,
 		...serverOptions,
 		fetch(req, server) {
 			if (req.method === 'POST') {
@@ -56,4 +60,5 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 		},
 	})
 	consola.success(`WebSocket server listening on ${server.hostname}:${server.port}`)
+	return server
 }

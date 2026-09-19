@@ -18,7 +18,7 @@ function createWebhookRecorder() {
 
 function createSocket(socketId: string) {
 	return {
-		send: mock(() => {}),
+		send: mock((_message: string) => {}),
 		close: mock(() => {}),
 		subscribe: mock(() => {}),
 		unsubscribe: mock(() => {}),
@@ -237,6 +237,12 @@ describe('BunPulse WebSocket Tests', () => {
 		})
 
 		handleWebSocketMessage(firstSocket as any, subscription, server as any, webhook.dispatcher)
+		const subscriptionSucceeded = JSON.parse(String(firstSocket.send.mock.calls.at(-1)?.[0]))
+		expect(JSON.parse(subscriptionSucceeded.data).presence).toEqual({
+			count: 1,
+			ids: ['user-1'],
+			hash: { 'user-1': { name: 'Ada' } },
+		})
 		handleWebSocketMessage(secondSocket as any, subscription, server as any, webhook.dispatcher)
 		expect(webhook.sent).toEqual([
 			{ name: 'channel_occupied', channel },
