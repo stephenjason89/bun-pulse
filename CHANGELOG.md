@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/stephenjason89/bun-pulse/compare/v2.0.0...v2.0.1) (2026-09-20)
+
+### 🐛 Bug Fixes
+
+* enforce pusher protocol validation ([#18](https://github.com/stephenjason89/bun-pulse/issues/18)) ([b7bc086](https://github.com/stephenjason89/bun-pulse/commit/b7bc086d8ba38a39275b511d296cb98f8c40d41a))
+* validate startup and preserve presence ids ([#17](https://github.com/stephenjason89/bun-pulse/issues/17)) ([2b4f589](https://github.com/stephenjason89/bun-pulse/commit/2b4f589847b518397389fbfe49cef4770fdc6b55))
+
 ## [2.0.0](https://github.com/stephenjason89/bun-pulse/compare/v1.5.2...v2.0.0) (2026-08-25)
 
 ### ⚠ BREAKING CHANGES
