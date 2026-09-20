@@ -1,8 +1,24 @@
 import type { WebhookEvent } from './types'
 import type { WebhookDispatcher } from './webhook'
-import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
-import { handleEventPublishing, handleWebSocketMessage, initializeWebSocketConnection, unsubscribeFromAllChannels, unsubscribeFromChannel } from './websocket'
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test'
+import { generateHmacSHA256HexDigest } from './utils'
+import { handleEventPublishing, handleWebSocketMessage, handleWebSocketUpgrade, initializeWebSocketConnection, isAuthorized, unsubscribeFromAllChannels, unsubscribeFromChannel } from './websocket'
 import * as websocketModule from './websocket'
+
+const originalAppKey = process.env.PUSHER_APP_KEY
+const originalAppSecret = process.env.PUSHER_APP_SECRET
+
+afterEach(() => {
+	mock.restore()
+	if (originalAppKey === undefined)
+		delete process.env.PUSHER_APP_KEY
+	else
+		process.env.PUSHER_APP_KEY = originalAppKey
+	if (originalAppSecret === undefined)
+		delete process.env.PUSHER_APP_SECRET
+	else
+		process.env.PUSHER_APP_SECRET = originalAppSecret
+})
 
 function createWebhookRecorder() {
 	const sent: WebhookEvent[] = []
@@ -25,6 +41,34 @@ function createSocket(socketId: string) {
 		data: { socketId, subscribedChannels: [] as string[] },
 	}
 }
+
+describe('Pusher protocol validation', () => {
+	it('binds presence authorization to channel_data', () => {
+		const socketId = '123.456'
+		const channel = 'presence-team'
+		const channelData = JSON.stringify({ user_id: 'user-1', user_info: { role: 'member' } })
+		const secret = 'app-secret'
+		process.env.PUSHER_APP_KEY = 'app-key'
+		process.env.PUSHER_APP_SECRET = secret
+		const auth = `app-key:${generateHmacSHA256HexDigest(`${socketId}:${channel}:${channelData}`, secret)}`
+
+		expect(isAuthorized(socketId, { channel, channel_data: channelData, auth })).toBe(true)
+		expect(isAuthorized(socketId, { channel, channel_data: JSON.stringify({ user_id: 'admin' }), auth })).toBe(false)
+	})
+
+	it('only upgrades WebSockets on the configured app path', async () => {
+		process.env.PUSHER_APP_KEY = 'app-key'
+		const server = { upgrade: mock(() => true) }
+
+		const rejected = await handleWebSocketUpgrade(new Request('http://localhost/app/wrong-key'), server as any)
+		expect(rejected?.status).toBe(404)
+		expect(server.upgrade).not.toHaveBeenCalled()
+
+		const accepted = await handleWebSocketUpgrade(new Request('http://localhost/app/app-key?client=js'), server as any)
+		expect(accepted).toBeUndefined()
+		expect(server.upgrade).toHaveBeenCalledTimes(1)
+	})
+})
 
 describe('BunPulse WebSocket Tests', () => {
 	beforeEach(() => {
@@ -153,6 +197,26 @@ describe('BunPulse WebSocket Tests', () => {
 		expect(() => unsubscribeFromChannel(wsMock as any, 'duplicate-unsubscribe-channel', {} as any)).not.toThrow()
 		expect(wsMock.unsubscribe).toHaveBeenCalledTimes(2)
 		expect(wsMock.data.subscribedChannels).toEqual([])
+	})
+
+	it('keeps __proto__ channel state out of Object.prototype', () => {
+		const socket = createSocket('prototype-channel')
+		const server = { publish: mock(() => {}) }
+		const webhook = createWebhookRecorder()
+
+		try {
+			handleWebSocketMessage(socket as any, JSON.stringify({
+				event: 'pusher:subscribe',
+				data: { channel: '__proto__' },
+			}), server as any, webhook.dispatcher)
+
+			expect(Object.hasOwn(Object.prototype, 'guest')).toBe(false)
+			expect(webhook.sent).toEqual([{ name: 'channel_occupied', channel: '__proto__' }])
+		}
+		finally {
+			unsubscribeFromChannel(socket as any, '__proto__', server as any, webhook.dispatcher)
+			delete (Object.prototype as any).guest
+		}
 	})
 
 	it('should unsubscribe all successfully joined channels', () => {
@@ -336,5 +400,38 @@ describe('BunPulse WebSocket Tests', () => {
 		)
 
 		expect(res.status).toBe(200)
+	})
+
+	it('publishes a standard Pusher event to every channel', async () => {
+		const req = new Request('http://localhost/apps/app-id/events', {
+			method: 'POST',
+			body: JSON.stringify({
+				name: 'order.updated',
+				channels: ['private-orders', 'private-dashboard'],
+				data: JSON.stringify({ id: 42 }),
+			}),
+		})
+		const server = { publish: mock((_channel: string, _message: string) => {}) }
+
+		const response = await handleEventPublishing(req, server as any)
+
+		expect(response.status).toBe(200)
+		expect(server.publish.mock.calls.map(([channel]) => channel)).toEqual(['private-orders', 'private-dashboard'])
+	})
+
+	it('rejects malformed publish payloads before broadcasting', async () => {
+		for (const body of [
+			{ name: 'order.updated', channels: 'private-orders', data: '{}' },
+			{ name: 'order.updated', channels: ['private-orders'] },
+		]) {
+			const server = { publish: mock(() => {}) }
+			const response = await handleEventPublishing(new Request('http://localhost/apps/app-id/events', {
+				method: 'POST',
+				body: JSON.stringify(body),
+			}), server as any)
+
+			expect(response.status).toBe(400)
+			expect(server.publish).not.toHaveBeenCalled()
+		}
 	})
 })

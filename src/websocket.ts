@@ -1,6 +1,6 @@
 import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
-import type { Channels, PusherEvent, SubscriptionData, WebSocketData } from './types'
+import type { Channels, PublishedEventData, PusherEvent, SubscriptionData, WebSocketData } from './types'
 import type { WebhookDispatcher } from './webhook'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
@@ -14,7 +14,7 @@ import {
 } from './utils'
 import { noOpWebhookDispatcher } from './webhook'
 
-const channels: Channels = {}
+const channels: Channels = Object.create(null)
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
@@ -45,8 +45,9 @@ export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>
 
 // Handles WebSocket upgrade requests
 export async function handleWebSocketUpgrade(req: Request, server: Server) {
-	const url = req.url
-	const urlParams = new URLSearchParams(url.split('?')[1])
+	const url = new URL(req.url)
+	if (url.pathname !== `/app/${import.meta.env.PUSHER_APP_KEY}`)
+		return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } })
 
 	const success = server.upgrade(req, {
 		data: {
@@ -56,19 +57,19 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 			socketId: generateSocketId(),
 			origin: req.headers.get('Origin') || 'N/A',
 			userAgent: req.headers.get('User-Agent') || 'N/A',
-			client: urlParams.get('client') || 'N/A',
-			version: urlParams.get('version') || 'N/A',
-			protocol: urlParams.get('protocol') || 'N/A',
+			client: url.searchParams.get('client') || 'N/A',
+			version: url.searchParams.get('version') || 'N/A',
+			protocol: url.searchParams.get('protocol') || 'N/A',
 			subscribedChannels: [],
 		},
 	})
 
 	if (success) {
-		consola.info(`WebSocket upgrade successful for ${url}`)
+		consola.info(`WebSocket upgrade successful for ${url.href}`)
 		return undefined // Bun handles the 101 Switching Protocols response
 	}
 	else {
-		consola.error(`WebSocket upgrade failed for ${url}`)
+		consola.error(`WebSocket upgrade failed for ${url.href}`)
 		return new Response('{}', { headers: { 'Content-Type': 'application/json' } })
 	}
 }
@@ -106,23 +107,29 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 // Handles event publishing for POST requests
 export async function handleEventPublishing(req: Request, server: Server) {
 	try {
-		const body = (await req.json()) as PusherEvent
-		const eventData = { event: body.name, channel: body.channel, data: body.data }
-		const startTime = Date.now()
-		server.publish(body.channel, JSON.stringify(eventData))
+		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown }
+		const eventChannels = body.channels ?? (body.channel ? [body.channel] : [])
+		if (typeof body.name !== 'string' || !body.name || (typeof body.data !== 'string' && (typeof body.data !== 'object' || body.data === null)) || !Array.isArray(eventChannels) || !eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
+			return new Response('Bad Request', { status: 400 })
 
-		axiom.log('pusher_channel:broadcast', {
-			app: { id: import.meta.env.PUSHER_APP_ID },
-			channel: { name: body.channel, type: getChannelType(body.channel) },
-			broadcast: {
-				event: body.name,
-				sockedId: body.data.socketId,
-				duration: Date.now() - startTime,
-				connections: getChannelConnections(body.channel, channels),
-			},
-		})
+		for (const channel of eventChannels) {
+			const eventData = { event: body.name, channel, data: body.data }
+			const startTime = Date.now()
+			server.publish(channel, JSON.stringify(eventData))
 
-		consola.success(`Event Published - Channel: ${body.channel}, Event: ${body.name}`)
+			axiom.log('pusher_channel:broadcast', {
+				app: { id: import.meta.env.PUSHER_APP_ID },
+				channel: { name: channel, type: getChannelType(channel) },
+				broadcast: {
+					event: body.name,
+					sockedId: typeof body.data === 'string' ? undefined : (body.data as PublishedEventData).socketId,
+					duration: Date.now() - startTime,
+					connections: getChannelConnections(channel, channels),
+				},
+			})
+
+			consola.success(`Event Published - Channel: ${channel}, Event: ${body.name}`)
+		}
 		return new Response('{}', { headers: { 'Content-Type': 'application/json' } })
 	}
 	catch (error) {
@@ -176,7 +183,7 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 	ws.subscribe(channel)
 
 	if (!channels[channel]) {
-		channels[channel] = {}
+		channels[channel] = Object.create(null)
 		if (!canceledVacancy) {
 			webhookDispatcher.send({ name: 'channel_occupied', channel })
 		}
@@ -307,6 +314,10 @@ function memberRemovedWebhookKey(channel: string, userId: string) {
 
 // Authorizes WebSocket connections
 export function isAuthorized(socketId: string, data: SubscriptionData): boolean {
-	const sha256 = generateHmacSHA256HexDigest(`${socketId}:${data.channel}`, String(import.meta.env.PUSHER_APP_SECRET))
+	const channelData = typeof data.channel_data === 'string' ? data.channel_data : JSON.stringify(data.channel_data)
+	const stringToSign = data.channel.startsWith('presence-') && channelData
+		? `${socketId}:${data.channel}:${channelData}`
+		: `${socketId}:${data.channel}`
+	const sha256 = generateHmacSHA256HexDigest(stringToSign, String(import.meta.env.PUSHER_APP_SECRET))
 	return data.auth === `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
 }
