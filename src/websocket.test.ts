@@ -36,6 +36,7 @@ function createSocket(socketId: string) {
 	return {
 		send: mock((_message: string) => {}),
 		close: mock(() => {}),
+		publish: mock(() => {}),
 		subscribe: mock(() => {}),
 		unsubscribe: mock(() => {}),
 		data: { socketId, subscribedChannels: [] as string[] },
@@ -160,9 +161,10 @@ describe('BunPulse WebSocket Tests', () => {
 		expect(wsMock.data.subscribedChannels).toEqual([])
 		expect(wsMock.send).toHaveBeenCalledWith(JSON.stringify({
 			event: 'pusher:error',
-			data: { message: 'Missing user_id for presence channel', code: 4009 },
+			channel: 'presence-test-channel',
+			data: { message: 'Missing user_id for presence channel' },
 		}))
-		expect(wsMock.close).toHaveBeenCalled()
+		expect(wsMock.close).not.toHaveBeenCalled()
 	})
 
 	it('should ignore unsubscribe for a missing channel entry', () => {
