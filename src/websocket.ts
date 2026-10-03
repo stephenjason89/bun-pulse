@@ -323,7 +323,7 @@ export function isAuthorized(socketId: string, data: SubscriptionData): boolean 
 	const expectedAuth = `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
 	if (typeof data.auth !== 'string')
 		return false
-	const received = Buffer.from(data.auth, 'utf16le')
-	const expected = Buffer.from(expectedAuth, 'utf16le')
+	const received = new Uint8Array(Buffer.from(data.auth, 'utf16le'))
+	const expected = new Uint8Array(Buffer.from(expectedAuth, 'utf16le'))
 	return received.length === expected.length && timingSafeEqual(received, expected)
 }
