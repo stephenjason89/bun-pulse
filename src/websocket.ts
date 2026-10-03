@@ -168,13 +168,12 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		ws.send(
 			JSON.stringify({
 				event: 'pusher:error',
+				channel: subscriptionData.channel,
 				data: {
 					message: 'Unauthorized',
-					code: 4009,
 				},
 			}),
 		)
-		ws.close()
 		consola.warn(`Unauthorized Access - Socket ID: ${ws.data.socketId}`)
 		return
 	}
@@ -183,9 +182,9 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 	if (isPresenceChannel && !user_id) {
 		ws.send(JSON.stringify({
 			event: 'pusher:error',
-			data: { message: 'Missing user_id for presence channel', code: 4009 },
+			channel: subscriptionData.channel,
+			data: { message: 'Missing user_id for presence channel' },
 		}))
-		ws.close()
 		return
 	}
 
@@ -219,28 +218,8 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		// New user for this channel
 		channels[channel][user_id ?? 'guest'] = { user_info, sockets: new Set([ws.data.socketId]) }
 
-		// Notify all members of the new member joining
-		if (isPresenceChannel) {
-			const startTime = Date.now()
-			server.publish(channel, JSON.stringify({
-				event: 'pusher_internal:member_added',
-				channel,
-				data: JSON.stringify({ user_id, user_info }),
-			}))
-			axiom.log('pusher_channel:broadcast', {
-				app: { id: import.meta.env.PUSHER_APP_ID },
-				channel: { name: channel, type: getChannelType(channel) },
-				broadcast: {
-					event: 'pusher_internal:member_added',
-					sockedId: ws.data.socketId,
-					duration: Date.now() - startTime,
-					connections: getChannelConnections(channel, channels),
-				},
-			})
-
-			if (!canceledMemberRemoval) {
-				webhookDispatcher.send({ name: 'member_added', channel, user_id: user_id as string })
-			}
+		if (isPresenceChannel && !canceledMemberRemoval) {
+			webhookDispatcher.send({ name: 'member_added', channel, user_id: user_id as string })
 		}
 	}
 
@@ -258,6 +237,26 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 			},
 		}) }),
 	}))
+
+	// Notify all members of the new member joining
+	if (isPresenceChannel && !user) {
+		const startTime = Date.now()
+		ws.publish(channel, JSON.stringify({
+			event: 'pusher_internal:member_added',
+			channel,
+			data: JSON.stringify({ user_id, user_info }),
+		}))
+		axiom.log('pusher_channel:broadcast', {
+			app: { id: import.meta.env.PUSHER_APP_ID },
+			channel: { name: channel, type: getChannelType(channel) },
+			broadcast: {
+				event: 'pusher_internal:member_added',
+				sockedId: ws.data.socketId,
+				duration: Date.now() - startTime,
+				connections: getChannelConnections(channel, channels),
+			},
+		})
+	}
 
 	consola.success(`Subscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 }
