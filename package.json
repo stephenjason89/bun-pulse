@@ -55,7 +55,9 @@
 		"conventional-changelog-conventionalcommits": "^8.0.0",
 		"eslint": "^9.11.1",
 		"husky": "^9.1.6",
-		"lint-staged": "^15.2.10"
+		"lint-staged": "^15.2.10",
+		"pusher": "5.3.4",
+		"pusher-js": "8.6.0"
 	},
 	"lint-staged": {
 		"*.{js,cjs,mjs,ts,jsx,json,json5,tsx,vue,md}": "eslint --fix"
