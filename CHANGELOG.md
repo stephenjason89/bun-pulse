@@ -1,3 +1,19 @@
+## [2.0.4](https://github.com/stephenjason89/bun-pulse/compare/v2.0.3...v2.0.4) (2026-10-03)
+
+### 🐛 Bug Fixes
+
+* compare subscription signatures in constant time ([5e19de2](https://github.com/stephenjason89/bun-pulse/commit/5e19de2754c5c18f51ef4a3ab9527784a227919b))
+* preserve exact signature token string encoding ([0ba1a02](https://github.com/stephenjason89/bun-pulse/commit/0ba1a02d90220b88db7f3482c1f666deb46809d0))
+* use compatible byte arrays for signature comparison ([bfc3bb1](https://github.com/stephenjason89/bun-pulse/commit/bfc3bb10f9698e6e180eecefd5bdef1ab40e863e))
+
+### 📚 Documentation
+
+* correct server API and heartbeat configuration ([02d8b2f](https://github.com/stephenjason89/bun-pulse/commit/02d8b2f0fbbd8a0f64898d126546099eeb652067))
+
+### ✅ Testing
+
+* verify Pusher SDK compatibility in CI ([d9b86d2](https://github.com/stephenjason89/bun-pulse/commit/d9b86d25e03c1b4b0d14787f241f63e16c4fd343))
+
 ## [2.0.3](https://github.com/stephenjason89/bun-pulse/compare/v2.0.2...v2.0.3) (2026-10-03)
 
 ### 🐛 Bug Fixes
