@@ -57,6 +57,28 @@ describe('Pusher protocol validation', () => {
 		expect(isAuthorized(socketId, { channel, channel_data: JSON.stringify({ user_id: 'admin' }), auth })).toBe(false)
 	})
 
+	it('accepts valid private signatures and safely rejects malformed credentials', () => {
+		process.env.PUSHER_APP_KEY = 'app-key'
+		process.env.PUSHER_APP_SECRET = 'app-secret'
+		const socketId = 'private-signature-socket'
+		const channel = 'private-signature-channel'
+		const auth = `app-key:${generateHmacSHA256HexDigest(`${socketId}:${channel}`, 'app-secret')}`
+
+		expect(isAuthorized(socketId, { channel, auth })).toBe(true)
+		for (const rejected of [undefined, '', auth.slice(0, -1), `${auth}a`, `${auth.slice(0, -1)}é`, `${auth.slice(0, -1)}${auth.endsWith('0') ? '1' : '0'}`])
+			expect(isAuthorized(socketId, { channel, auth: rejected })).toBe(false)
+	})
+
+	it('preserves exact token equality for malformed Unicode credentials', () => {
+		process.env.PUSHER_APP_KEY = 'app-\uFFFD-key'
+		process.env.PUSHER_APP_SECRET = 'app-secret'
+		const socketId = 'unicode-signature-socket'
+		const channel = 'private-unicode-signature'
+		const auth = `${process.env.PUSHER_APP_KEY}:${generateHmacSHA256HexDigest(`${socketId}:${channel}`, 'app-secret')}`
+		expect(isAuthorized(socketId, { channel, auth })).toBe(true)
+		expect(isAuthorized(socketId, { channel, auth: auth.replace('\uFFFD', '\uD800') })).toBe(false)
+	})
+
 	it('only upgrades WebSockets on the configured app path', async () => {
 		process.env.PUSHER_APP_KEY = 'app-key'
 		const server = { upgrade: mock(() => true) }
