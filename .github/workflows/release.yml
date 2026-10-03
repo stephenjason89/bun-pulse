@@ -1,44 +1,46 @@
-name: Semantic Release
+name: Recover npm 2.0.2
+run-name: Recover the existing v2.0.2 tag on npm
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-  schedule:
-    - cron: 0 16 * * 0 # Weekly pre-releases at midnight Monday GMT+8
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout the existing v2.0.2 release
         uses: actions/checkout@v4
+        with:
+          ref: 748a57b6a97d01efaee67589c6f467a7919c1420
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          registry-url: https://registry.npmjs.org
 
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.0
 
-      - uses: actions/cache@v4
-        name: Setup bun cache
-        with:
-          path: ~/.bun/install/cache
-          key: "${{ runner.os }}-${{ hashFiles('**/bun.lockb') }}"
-          restore-keys: |
-            ${{ runner.os }}-
-
-      - name: Install Project Dependencies
-        run: bun install
-
-      - name: Run semantic-release
-        run: HUSKY=0 bunx semantic-release
+      - name: Verify and build the existing release
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun test src
+          bun run build
+          bunx --no-install eslint src package.json eslint.config.js
+          npm version 2.0.2 --no-git-tag-version --ignore-scripts
+          npm pack --ignore-scripts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          HUSKY: '0'
+
+      - name: Publish the existing release to npm
+        run: |
+          npm whoami
+          npm publish bun-pulse-2.0.2.tgz --tag latest --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
