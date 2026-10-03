@@ -1,3 +1,9 @@
+## [2.0.2](https://github.com/stephenjason89/bun-pulse/compare/v2.0.1...v2.0.2) (2026-10-03)
+
+### 🐛 Bug Fixes
+
+* **deps:** update bumped minor version of packages ([b762650](https://github.com/stephenjason89/bun-pulse/commit/b762650cec901c7c3f3071deddab3ab96e0e55e1))
+
 ## [2.0.1](https://github.com/stephenjason89/bun-pulse/compare/v2.0.0...v2.0.1) (2026-09-20)
 
 ### 🐛 Bug Fixes
