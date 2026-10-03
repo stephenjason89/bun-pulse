@@ -15,9 +15,11 @@ import {
 import { noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = Object.create(null)
+const sockets = new Map<string, ServerWebSocket<WebSocketData>>()
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
+	sockets.set(ws.data.socketId, ws)
 	const connectionData = {
 		event: 'pusher:connection_established',
 		data: JSON.stringify({ socket_id: ws.data.socketId, activity_timeout: heartbeat.interval / 1000 }),
@@ -107,15 +109,22 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 // Handles event publishing for POST requests
 export async function handleEventPublishing(req: Request, server: Server) {
 	try {
-		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown }
+		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown, socket_id?: unknown }
 		const eventChannels = body.channels ?? (body.channel ? [body.channel] : [])
 		if (typeof body.name !== 'string' || !body.name || (typeof body.data !== 'string' && (typeof body.data !== 'object' || body.data === null)) || !Array.isArray(eventChannels) || !eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
 			return new Response('Bad Request', { status: 400 })
 
+		if (body.socket_id !== undefined && typeof body.socket_id !== 'string')
+			return new Response('Bad Request', { status: 400 })
+		const excludedSocket = typeof body.socket_id === 'string' ? sockets.get(body.socket_id) : undefined
+
 		for (const channel of eventChannels) {
 			const eventData = { event: body.name, channel, data: body.data }
 			const startTime = Date.now()
-			server.publish(channel, JSON.stringify(eventData))
+			if (excludedSocket)
+				excludedSocket.publish(channel, JSON.stringify(eventData))
+			else
+				server.publish(channel, JSON.stringify(eventData))
 
 			axiom.log('pusher_channel:broadcast', {
 				app: { id: import.meta.env.PUSHER_APP_ID },
@@ -297,6 +306,8 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 }
 
 export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
+	if (sockets.get(ws.data.socketId) === ws)
+		sockets.delete(ws.data.socketId)
 	const subscribedChannels = ws.data.subscribedChannels
 
 	for (const channel of [...subscribedChannels]) {
