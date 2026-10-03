@@ -2,6 +2,7 @@ import type { Server, ServerWebSocket } from 'bun'
 import type { Buffer } from 'node:buffer'
 import type { Channels, PublishedEventData, PusherEvent, SubscriptionData, WebSocketData } from './types'
 import type { WebhookDispatcher } from './webhook'
+import { timingSafeEqual } from 'node:crypto'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
 import {
@@ -319,5 +320,10 @@ export function isAuthorized(socketId: string, data: SubscriptionData): boolean 
 		? `${socketId}:${data.channel}:${channelData}`
 		: `${socketId}:${data.channel}`
 	const sha256 = generateHmacSHA256HexDigest(stringToSign, String(import.meta.env.PUSHER_APP_SECRET))
-	return data.auth === `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
+	const expectedAuth = `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
+	if (typeof data.auth !== 'string')
+		return false
+	const received = new TextEncoder().encode(data.auth)
+	const expected = new TextEncoder().encode(expectedAuth)
+	return received.length === expected.length && timingSafeEqual(received, expected)
 }
