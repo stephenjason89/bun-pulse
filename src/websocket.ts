@@ -1,7 +1,7 @@
 import type { Server, ServerWebSocket } from 'bun'
-import type { Buffer } from 'node:buffer'
 import type { Channels, PublishedEventData, PusherEvent, SubscriptionData, WebSocketData } from './types'
 import type { WebhookDispatcher } from './webhook'
+import { Buffer } from 'node:buffer'
 import { timingSafeEqual } from 'node:crypto'
 import { consola } from 'consola'
 import { WebSocketReadyState } from './types'
@@ -323,7 +323,7 @@ export function isAuthorized(socketId: string, data: SubscriptionData): boolean 
 	const expectedAuth = `${import.meta.env.PUSHER_APP_KEY}:${sha256}`
 	if (typeof data.auth !== 'string')
 		return false
-	const received = new TextEncoder().encode(data.auth)
-	const expected = new TextEncoder().encode(expectedAuth)
+	const received = Buffer.from(data.auth, 'utf16le')
+	const expected = Buffer.from(expectedAuth, 'utf16le')
 	return received.length === expected.length && timingSafeEqual(received, expected)
 }

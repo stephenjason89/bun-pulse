@@ -68,6 +68,16 @@ describe('Pusher protocol validation', () => {
 			expect(isAuthorized(socketId, { channel, auth: rejected })).toBe(false)
 	})
 
+	it('preserves exact token equality for malformed Unicode credentials', () => {
+		process.env.PUSHER_APP_KEY = 'app-\uFFFD-key'
+		process.env.PUSHER_APP_SECRET = 'app-secret'
+		const socketId = 'unicode-signature-socket'
+		const channel = 'private-unicode-signature'
+		const auth = `${process.env.PUSHER_APP_KEY}:${generateHmacSHA256HexDigest(`${socketId}:${channel}`, 'app-secret')}`
+		expect(isAuthorized(socketId, { channel, auth })).toBe(true)
+		expect(isAuthorized(socketId, { channel, auth: auth.replace('\uFFFD', '\uD800') })).toBe(false)
+	})
+
 	it('only upgrades WebSockets on the configured app path', async () => {
 		process.env.PUSHER_APP_KEY = 'app-key'
 		const server = { upgrade: mock(() => true) }
