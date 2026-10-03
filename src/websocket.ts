@@ -15,11 +15,18 @@ import {
 import { noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = Object.create(null)
-const sockets = new Map<string, ServerWebSocket<WebSocketData>>()
+const sockets = new WeakMap<Server, Map<string, ServerWebSocket<WebSocketData>>>()
 
 // Initializes a WebSocket connection with heartbeat settings
-export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }) {
-	sockets.set(ws.data.socketId, ws)
+export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }, server?: Server) {
+	if (server) {
+		let connections = sockets.get(server)
+		if (!connections) {
+			connections = new Map()
+			sockets.set(server, connections)
+		}
+		connections.set(ws.data.socketId, ws)
+	}
 	const connectionData = {
 		event: 'pusher:connection_established',
 		data: JSON.stringify({ socket_id: ws.data.socketId, activity_timeout: heartbeat.interval / 1000 }),
@@ -116,7 +123,7 @@ export async function handleEventPublishing(req: Request, server: Server) {
 
 		if (body.socket_id !== undefined && typeof body.socket_id !== 'string')
 			return new Response('Bad Request', { status: 400 })
-		const excludedSocket = typeof body.socket_id === 'string' ? sockets.get(body.socket_id) : undefined
+		const excludedSocket = typeof body.socket_id === 'string' ? sockets.get(server)?.get(body.socket_id) : undefined
 
 		for (const channel of eventChannels) {
 			const eventData = { event: body.name, channel, data: body.data }
@@ -306,8 +313,9 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 }
 
 export function unsubscribeFromAllChannels(ws: ServerWebSocket<WebSocketData>, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
-	if (sockets.get(ws.data.socketId) === ws)
-		sockets.delete(ws.data.socketId)
+	const connections = sockets.get(server)
+	if (connections?.get(ws.data.socketId) === ws)
+		connections.delete(ws.data.socketId)
 	const subscribedChannels = ws.data.subscribedChannels
 
 	for (const channel of [...subscribedChannels]) {

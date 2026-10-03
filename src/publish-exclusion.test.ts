@@ -67,3 +67,36 @@ async function waitFor(condition: () => boolean) {
 		await Bun.sleep(5)
 	}
 }
+
+it('does not use another server instance\'s socket to exclude a broadcast', async () => {
+	process.env.PUSHER_APP_KEY = 'exclusion-key'
+	process.env.PUSHER_APP_SECRET = 'exclusion-secret'
+	const servers = [0, 1].map(() => startBunPulse({ port: 0, hostname: '127.0.0.1', heartbeat: { interval: 10 } }))
+	const clients: { ws: WebSocket, messages: any[] }[] = []
+	try {
+		for (const server of servers) {
+			const ws = new WebSocket(`ws://127.0.0.1:${server.port}/app/exclusion-key`)
+			const messages: any[] = []
+			clients.push({ ws, messages })
+			ws.addEventListener('message', event => messages.push(JSON.parse(String(event.data))))
+			await waitFor(() => messages.some(message => message.event === 'pusher:connection_established'))
+			ws.send(JSON.stringify({ event: 'pusher:subscribe', data: { channel: 'shared-instance-room' } }))
+			await waitFor(() => messages.some(message => message.event === 'pusher_internal:subscription_succeeded'))
+		}
+		const excludedId = JSON.parse(clients[0].messages[0].data).socket_id
+		const response = await fetch(`http://127.0.0.1:${servers[1].port}/apps/test/events`, {
+			method: 'POST',
+			body: JSON.stringify({ name: 'instance-update', channels: ['shared-instance-room'], data: '{}', socket_id: excludedId }),
+		})
+		expect(response.status).toBe(200)
+		await waitFor(() => clients[1].messages.some(message => message.event === 'instance-update'))
+		expect(clients[1].messages.filter(message => message.event === 'instance-update')).toHaveLength(1)
+		expect(clients[0].messages.filter(message => message.event === 'instance-update')).toHaveLength(0)
+	}
+	finally {
+		for (const client of clients)
+			client.ws.close()
+		for (const server of servers)
+			server.stop(true)
+	}
+}, 5000)

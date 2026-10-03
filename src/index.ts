@@ -42,7 +42,7 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 				handleWebSocketMessage(ws, message, server, webhookDispatcher)
 			},
 			open: (ws) => {
-				initializeWebSocketConnection(ws, finalHeartbeat)
+				initializeWebSocketConnection(ws, finalHeartbeat, server)
 				axiom.log('pusher_connection:open', {
 					app: { id: import.meta.env.PUSHER_APP_ID },
 					connection: { socketId: ws.data.socketId, origin: ws.data.origin, userAgent: ws.data.userAgent, client: ws.data.client, version: ws.data.version, protocol: ws.data.protocol },
