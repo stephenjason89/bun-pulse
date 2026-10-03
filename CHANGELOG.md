@@ -1,3 +1,11 @@
+## [2.0.3](https://github.com/stephenjason89/bun-pulse/compare/v2.0.2...v2.0.3) (2026-10-03)
+
+### 🐛 Bug Fixes
+
+* honor socket exclusion in HTTP broadcasts ([3ab92ec](https://github.com/stephenjason89/bun-pulse/commit/3ab92ec1bd2e3dcc76db0763f0d8d7d2326eecfb))
+* preserve connections during subscription failures ([8b7ed10](https://github.com/stephenjason89/bun-pulse/commit/8b7ed10cc031a0d5522430e69aaf19bc718b8657))
+* scope excluded sockets to their server instance ([6d3268d](https://github.com/stephenjason89/bun-pulse/commit/6d3268dd26a387ba76c56226d96c31ff255b2989))
+
 ## [2.0.2](https://github.com/stephenjason89/bun-pulse/compare/v2.0.1...v2.0.2) (2026-10-03)
 
 ### 🐛 Bug Fixes
