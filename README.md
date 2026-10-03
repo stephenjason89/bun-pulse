@@ -64,7 +64,7 @@ then `bun run your-file.ts` to start the server.
 
 ### Handling Events and Forwarding Messages
 
-> **Note**: Typically, you won’t need to manually publish events with `server.publish()` since your backend (e.g., Laravel Broadcasting) automatically handles broadcasting events to clients via **BunPulse**. However, if you want to extend functionality or handle specific events (e.g., custom WebSocket events), you can manually manage these cases using `server.publish()` or `server.on()`.
+> **Note**: Typically, you won’t need to manually publish events with `server.publish()` since your backend (e.g., Laravel Broadcasting) automatically handles broadcasting events to clients via **BunPulse**. However, if you want to extend functionality or handle specific events (e.g., custom WebSocket events), you can manually manage these cases using `server.publish()`. The returned object is a Bun `Server`, not a Node-style event emitter.
 
 **BunPulse** automatically forwards events from your backend to all connected clients via WebSockets, using the Pusher protocol. It seamlessly handles event broadcasting, connection heartbeats, and secure HMAC-based authentication.
 
@@ -123,8 +123,9 @@ You can customize **BunPulse** by passing configuration options when starting th
 - `*`: All bun websocket server options are supported, see [bun docs](https://bun.sh/docs/api/http#bun-serve) for more info.
 - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
 - `webhookUrl`: An optional URL that receives Pusher-compatible channel and presence webhooks.
-- `heartbeatInterval`: The interval (in milliseconds) at which WebSocket heartbeat pings are sent to keep the connection alive (default: `25000`).
-- `heartbeatTimeout`: The timeout (in milliseconds) after which an inactive WebSocket connection is closed (default: `60000`).
+- `heartbeat.interval`: The interval in milliseconds for checking connection activity (default: `25000`).
+- `heartbeat.timeout`: The inactivity timeout in milliseconds (default: `60000`).
+- `heartbeat.sendPing`: Whether to send server heartbeat pings (default: `false`).
 
 ### Example with Custom Config:
 
@@ -132,8 +133,11 @@ You can customize **BunPulse** by passing configuration options when starting th
 const server = startBunPulse({
 	port: 7000,
 	webhookUrl: 'https://myserver.com/api/subscriptions/webhook',
-	heartbeatInterval: 20000, // Heartbeat every 20 seconds
-	heartbeatTimeout: 50000 // Timeout after 50 seconds of inactivity
+	heartbeat: {
+		interval: 20000,
+		timeout: 50000,
+		sendPing: true
+	}
 })
 ```
 
@@ -255,38 +259,27 @@ Starts the BunPulse WebSocket server.
 - `config` (optional): An object containing configuration options such as:
     - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
     - `webhookUrl`: URL for Pusher-compatible webhook events.
-    - `heartbeatInterval`: Interval for WebSocket heartbeats.
-    - `heartbeatTimeout`: Timeout period for inactive WebSocket connections.
+    - `heartbeat`: Optional `{ interval, timeout, sendPing }` heartbeat settings.
 
 **Returns**: The WebSocket server instance.
 
 ---
 
-Since **BunPulse** is primarily designed to forward messages from the backend using broadcasting tools (e.g., Laravel), you generally don't need to manually publish events or listen for specific WebSocket events. If you require manual publishing or event listening, here are the methods you can use:
+The returned object is Bun's `Server`. It supports `publish()` and `stop()`; it does not have a `server.on()` method. BunPulse installs its own WebSocket callbacks to handle the Pusher protocol.
 
-### `server.publish(channel: string, event: PusherEvent)`
+### `server.publish(channel: string, message: string)`
 
-Publishes an event to a specific channel.
+Publishes an already serialized message to subscribers of a channel. Returns the number of bytes sent, `0` when there are no subscribers, or `-1` when backpressure prevents delivery.
 
-**Arguments**:
-- `channel`: The name of the channel to which the event is published.
-- `event`: An object containing the event name and data to be published.
+```typescript
+server.publish('my-channel', JSON.stringify({
+	event: 'my-event',
+	channel: 'my-channel',
+	data: JSON.stringify({ message: 'Hello' })
+}))
+```
 
-**Returns**: `void`
-
-> **Note**: In most cases, this is handled by your backend through broadcasting (e.g., Laravel Broadcasting) and is not required to be manually invoked.
-
-### `server.on(event: string, callback: (ws, data) => void)`
-
-Listens for specific WebSocket or Pusher events (e.g., `pusher:subscribe`).
-
-**Arguments**:
-- `event`: The name of the event (e.g., subscription or connection event).
-- `callback`: The function to be executed when the event is triggered.
-
-**Returns**: `void`
-
-> **Note**: Event listening is generally handled through your frontend (e.g., Pusher.js or Laravel Echo) and doesn’t need to be manually configured in the server.
+Backend broadcasting through the HTTP events endpoint is the usual way to publish. Call `server.stop()` when shutting down the server.
 
 ## Contributing
 
