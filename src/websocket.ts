@@ -145,7 +145,7 @@ function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: 
 	const channel = frame.channel
 	if (typeof channel !== 'string' || channel.length > 200 || !/^(?:private-|presence-)[\w\-=@,.;]+$/.test(channel) || channel.startsWith('private-encrypted-'))
 		return reject('Client events require a private or presence channel')
-	const subscription = Object.hasOwn(ws.data.subscriptions ?? {}, channel) ? ws.data.subscriptions[channel] : undefined
+	const subscription = ws.data.subscriptions?.[channel]
 	if (!subscription?.auth || !ws.data.subscribedChannels.includes(channel))
 		return reject('Client event requires an authorized subscription')
 	const isPresenceChannel = channel.startsWith('presence-')
