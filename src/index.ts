@@ -15,6 +15,7 @@ import {
 interface BunPulseConfig {
 	webhookUrl?: string
 	requireHttpAuth?: boolean
+	clientEvents?: boolean
 	heartbeat?: {
 		interval?: number
 		timeout?: number
@@ -28,9 +29,11 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 	if (!appKey || !secret)
 		throw new Error('PUSHER_APP_KEY and PUSHER_APP_SECRET are required')
 
-	const { webhookUrl, requireHttpAuth = false, heartbeat = {}, ...serverOptions } = config
+	const { webhookUrl, requireHttpAuth = false, clientEvents = false, heartbeat = {}, ...serverOptions } = config
 	if (typeof requireHttpAuth !== 'boolean')
 		throw new Error('requireHttpAuth must be a boolean')
+	if (typeof clientEvents !== 'boolean')
+		throw new Error('clientEvents must be a boolean')
 	const appId = import.meta.env.PUSHER_APP_ID
 	if (requireHttpAuth && !appId?.trim())
 		throw new Error('PUSHER_APP_ID is required when requireHttpAuth is enabled')
@@ -54,7 +57,7 @@ export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {
 		},
 		websocket: {
 			message(ws: ServerWebSocket<WebSocketData>, message) {
-				handleWebSocketMessage(ws, message, server, webhookDispatcher)
+				handleWebSocketMessage(ws, message, server, webhookDispatcher, clientEvents)
 			},
 			open: (ws) => {
 				initializeWebSocketConnection(ws, finalHeartbeat, server)
