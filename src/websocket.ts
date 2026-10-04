@@ -17,6 +17,7 @@ import { noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = Object.create(null)
 const sockets = new WeakMap<Server, Map<string, ServerWebSocket<WebSocketData>>>()
+const clientEventTimes = new WeakMap<ServerWebSocket<WebSocketData>, number[]>()
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }, server?: Server) {
@@ -86,10 +87,21 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 }
 
 // Handles incoming WebSocket messages
-export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
+export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher, clientEvents = false) {
 	try {
 		consola.info(`Message Received - Socket ID: ${ws.data.socketId}`)
-		const messageObj = JSON.parse(String(message)) as Omit<PusherEvent, 'channel'>
+		let messageObj: PusherEvent
+		try {
+			messageObj = JSON.parse(String(message))
+		}
+		catch {
+			ws.send(JSON.stringify({ event: 'pusher:error', data: { message: 'Invalid JSON message' } }))
+			return
+		}
+		if (!messageObj || typeof messageObj !== 'object' || Array.isArray(messageObj)) {
+			ws.send(JSON.stringify({ event: 'pusher:error', data: { message: 'Invalid message object' } }))
+			return
+		}
 		messageLogger.box(messageObj)
 
 		switch (messageObj.event) {
@@ -107,12 +119,55 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 				unsubscribeFromChannel(ws, messageObj.data.channel, server, webhookDispatcher)
 				break
 			default:
-				consola.error(`Unhandled Event - Event: ${messageObj.event}`)
+				if (typeof messageObj.event === 'string' && messageObj.event.startsWith('client-'))
+					publishClientEvent(ws, messageObj, clientEvents)
+				else
+					consola.error(`Unhandled Event - Event: ${messageObj.event}`)
 		}
 	}
 	catch (error) {
 		consola.error(`Message Handling Error - ${error.message}`)
 	}
+}
+
+function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: string, channel?: unknown, data?: unknown }, enabled: boolean) {
+	const reject = (message: string) => {
+		ws.send(JSON.stringify({
+			event: 'pusher:error',
+			...(typeof frame.channel === 'string' ? { channel: frame.channel } : {}),
+			data: { message },
+		}))
+	}
+	if (enabled !== true)
+		return reject('Client events are disabled')
+	if (frame.event.length <= 'client-'.length || frame.event.length > 200)
+		return reject('Invalid client event name')
+	const channel = frame.channel
+	if (typeof channel !== 'string' || channel.length > 200 || !/^(?:private-|presence-)[\w\-=@,.;]+$/.test(channel) || channel.startsWith('private-encrypted-'))
+		return reject('Client events require a private or presence channel')
+	const subscription = Object.hasOwn(ws.data.subscriptions ?? {}, channel) ? ws.data.subscriptions[channel] : undefined
+	if (!subscription?.auth || !ws.data.subscribedChannels.includes(channel))
+		return reject('Client event requires an authorized subscription')
+	const isPresenceChannel = channel.startsWith('presence-')
+	if (isPresenceChannel && (typeof subscription.user_id !== 'string' || !subscription.user_id))
+		return reject('Client event requires an authorized presence identity')
+	const serializedData = JSON.stringify(frame.data)
+	if (serializedData === undefined)
+		return reject('Client event data is required')
+	if (Buffer.byteLength(serializedData, 'utf8') > 10240)
+		return reject('Client event data exceeds 10KB')
+	const now = Date.now()
+	const recent = (clientEventTimes.get(ws) ?? []).filter(time => now - time < 1000)
+	if (recent.length >= 10)
+		return reject('Client event rate limit exceeded')
+	recent.push(now)
+	clientEventTimes.set(ws, recent)
+	ws.publish(channel, JSON.stringify({
+		event: frame.event,
+		channel,
+		data: frame.data,
+		...(isPresenceChannel ? { user_id: subscription.user_id } : {}),
+	}))
 }
 
 // Handles event publishing for POST requests
