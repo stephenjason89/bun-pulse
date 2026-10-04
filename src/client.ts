@@ -273,12 +273,7 @@ export default class BunPulseClient extends Dispatcher {
 	}
 
 	disconnect(): void {
-		this.stopped = true
-		clearTimeout(this.reconnectTimer)
-		const socket = this.socket
-		this.releaseSocket()
-		socket?.close()
-		this.connection.setState('disconnected')
+		this.stop('disconnected')
 	}
 
 	signin(): never {
@@ -316,6 +311,15 @@ export default class BunPulseClient extends Dispatcher {
 			return true
 		}
 		catch { return false }
+	}
+
+	private stop(state: 'disconnected' | 'failed'): void {
+		this.stopped = true
+		clearTimeout(this.reconnectTimer)
+		const socket = this.socket
+		this.releaseSocket()
+		socket?.close()
+		this.connection.setState(state)
 	}
 
 	private releaseSocket(): void {
@@ -400,10 +404,8 @@ export default class BunPulseClient extends Dispatcher {
 			else if (channel) {
 				channel.emit('pusher:error', data)
 			}
-			if (data?.code >= 4000 && data.code < 4100) {
-				this.disconnect()
-				this.connection.setState('failed')
-			}
+			if (data?.code >= 4000 && data.code < 4100)
+				this.stop('failed')
 			return
 		}
 		if (channel && message.event === 'pusher_internal:subscription_succeeded' && channel.subscriptionPending) {
