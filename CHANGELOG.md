@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/stephenjason89/bun-pulse/compare/v2.2.0...v2.3.0) (2026-10-04)
+
+### 🚀 Features
+
+* **webhooks:** deliver accepted client events ([d7634ce](https://github.com/stephenjason89/bun-pulse/commit/d7634cebf38de62b72df62d3101cb967ff3ba4ab))
+
 ## [2.2.0](https://github.com/stephenjason89/bun-pulse/compare/v2.1.1...v2.2.0) (2026-10-04)
 
 ### 🚀 Features
