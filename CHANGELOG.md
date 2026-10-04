@@ -1,3 +1,9 @@
+## [2.1.0](https://github.com/stephenjason89/bun-pulse/compare/v2.0.5...v2.1.0) (2026-10-04)
+
+### 🚀 Features
+
+* require signed HTTP publishing when enabled ([e15389f](https://github.com/stephenjason89/bun-pulse/commit/e15389f3a8e885b82d970cb157876e55d0b9bbbe))
+
 ## [2.0.5](https://github.com/stephenjason89/bun-pulse/compare/v2.0.4...v2.0.5) (2026-10-04)
 
 ### 🐛 Bug Fixes
