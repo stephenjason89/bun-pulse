@@ -71,6 +71,7 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 			version: url.searchParams.get('version') || 'N/A',
 			protocol: url.searchParams.get('protocol') || 'N/A',
 			subscribedChannels: [],
+			subscriptions: Object.create(null),
 		},
 	})
 
@@ -193,13 +194,29 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 	}
 
 	const { channel, auth = '', channel_data } = subscriptionData
-	Object.assign(ws.data, { channel, auth, channel_data })
-	const canceledVacancy = webhookDispatcher.cancel(channelVacatedWebhookKey(channel))
-
-	if (!ws.data.subscribedChannels.includes(channel)) {
-		ws.data.subscribedChannels.push(channel)
+	const existingUserId = Object.keys(channels[channel] ?? {}).find(id => channels[channel][id].sockets.has(ws.data.socketId))
+	if (isPresenceChannel && existingUserId !== undefined && existingUserId !== String(user_id)) {
+		ws.send(JSON.stringify({
+			event: 'pusher:error',
+			channel,
+			data: { message: 'Already subscribed with a different user_id' },
+		}))
+		return
 	}
-	ws.subscribe(channel)
+
+	if (existingUserId === undefined) {
+		ws.subscribe(channel)
+		ws.data.subscriptions ??= Object.create(null)
+		ws.data.subscriptions[channel] = {
+			auth,
+			...(channel_data === undefined ? {} : { channel_data }),
+			...(isPresenceChannel ? { user_id: String(user_id) } : {}),
+		}
+		Object.assign(ws.data, { channel, auth, channel_data })
+		if (!ws.data.subscribedChannels.includes(channel))
+			ws.data.subscribedChannels.push(channel)
+	}
+	const canceledVacancy = webhookDispatcher.cancel(channelVacatedWebhookKey(channel))
 
 	if (!channels[channel]) {
 		channels[channel] = Object.create(null)
@@ -208,7 +225,7 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		}
 	}
 
-	const user = channels[channel][user_id ?? 'guest']
+	const user = channels[channel][existingUserId ?? user_id ?? 'guest']
 
 	if (user) {
 		// Add this socket to the user's existing connections
@@ -271,6 +288,8 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 		return
 	ws.unsubscribe(channel)
 	ws.data.subscribedChannels = ws.data.subscribedChannels.filter(subscribedChannel => subscribedChannel !== channel)
+	if (ws.data.subscriptions)
+		delete ws.data.subscriptions[channel]
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 
 	const channelMembers = channels[channel]

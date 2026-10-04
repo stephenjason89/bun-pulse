@@ -1,6 +1,8 @@
 export interface WebSocketData {
 	createdAt: number
+	/** @deprecated Last successful join snapshot. Use subscriptions for current channel state. */
 	channel: string
+	/** @deprecated Last successful join snapshot. Use subscriptions for current channel state. */
 	auth: string
 	socketId: string
 	origin: string
@@ -9,7 +11,9 @@ export interface WebSocketData {
 	version: string
 	protocol: string
 	subscribedChannels: string[]
+	subscriptions?: Record<string, ChannelSubscription>
 	lastPingPong?: number
+	/** @deprecated Last successful join snapshot. Use subscriptions for current channel state. */
 	channel_data?: string | {
 		user_id?: string
 		user_info?: Record<string, any>
@@ -24,6 +28,13 @@ export interface SubscriptionData {
 		user_id?: string
 		user_info?: Record<string, any>
 	}
+}
+
+export interface ChannelSubscription {
+	auth: string
+	channel_data?: SubscriptionData['channel_data']
+	/** The authorized presence identity for this channel. */
+	user_id?: string
 }
 
 export interface PublishedEventData {
