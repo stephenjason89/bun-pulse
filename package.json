@@ -28,6 +28,8 @@
 	],
 	"main": "dist/index.js",
 	"files": [
+		"client.d.ts",
+		"client.js",
 		"dist"
 	],
 	"scripts": {
