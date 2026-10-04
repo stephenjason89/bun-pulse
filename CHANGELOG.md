@@ -1,3 +1,9 @@
+## [2.0.5](https://github.com/stephenjason89/bun-pulse/compare/v2.0.4...v2.0.5) (2026-10-04)
+
+### 🐛 Bug Fixes
+
+* reject malformed publish requests with bad request ([7c5a0e0](https://github.com/stephenjason89/bun-pulse/commit/7c5a0e0855ef9f1e4a6a1110acf3295a723aec86))
+
 ## [2.0.4](https://github.com/stephenjason89/bun-pulse/compare/v2.0.3...v2.0.4) (2026-10-03)
 
 ### 🐛 Bug Fixes
