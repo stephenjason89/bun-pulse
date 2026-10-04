@@ -117,7 +117,10 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 // Handles event publishing for POST requests
 export async function handleEventPublishing(req: Request, server: Server) {
 	try {
-		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown, socket_id?: unknown }
+		const parsedBody: unknown = await req.json().catch(() => undefined)
+		if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody))
+			return new Response('Bad Request', { status: 400 })
+		const body = parsedBody as { name?: unknown, channel?: unknown, channels?: unknown, data?: unknown, socket_id?: unknown }
 		const eventChannels = body.channels ?? (body.channel ? [body.channel] : [])
 		if (typeof body.name !== 'string' || !body.name || (typeof body.data !== 'string' && (typeof body.data !== 'object' || body.data === null)) || !Array.isArray(eventChannels) || !eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
 			return new Response('Bad Request', { status: 400 })
