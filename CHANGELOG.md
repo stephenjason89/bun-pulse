@@ -1,3 +1,9 @@
+## [2.1.1](https://github.com/stephenjason89/bun-pulse/compare/v2.1.0...v2.1.1) (2026-10-04)
+
+### 🐛 Bug Fixes
+
+* retain subscription state per channel ([cb46db3](https://github.com/stephenjason89/bun-pulse/commit/cb46db38659eb435d56b18baffcc105647020599))
+
 ## [2.1.0](https://github.com/stephenjason89/bun-pulse/compare/v2.0.5...v2.1.0) (2026-10-04)
 
 ### 🚀 Features
