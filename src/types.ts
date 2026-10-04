@@ -56,6 +56,13 @@ export type WebhookEvent = {
 	name: 'member_added' | 'member_removed'
 	channel: string
 	user_id: string
+} | {
+	name: 'client_event'
+	channel: string
+	event: string
+	socket_id: string
+	data: string
+	user_id?: string
 }
 
 export const WebSocketReadyState = { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 } as const

@@ -144,7 +144,7 @@ const server = startBunPulse({
 
 ## Webhooks
 
-When `webhookUrl` is configured, BunPulse sends `channel_occupied`, `channel_vacated`, `member_added`, and `member_removed` events. Presence events include a `user_id`. Disconnect events wait one second before delivery so a quick reconnect can cancel them.
+When `webhookUrl` is configured, BunPulse sends `channel_occupied`, `channel_vacated`, `member_added`, and `member_removed` events. With `clientEvents: true`, it also sends `client_event` after accepted client events. These hooks include the sending `socket_id`, event name, and JSON-encoded data. Presence events include a `user_id`. See [client events](docs/client-events.md) for authorization, size, and rate limits. Disconnect events wait one second before delivery so a quick reconnect can cancel them.
 
 Each request uses the Pusher webhook format:
 

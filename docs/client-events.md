@@ -28,3 +28,9 @@ Disabled publishing, invalid event or channel names, missing authorization, miss
 These events originate from other clients. Use HTTP publishing for operations that need server-side validation or persistence.
 
 The behavior follows [Pusher's client event rules](https://pusher.com/docs/channels/using_channels/events/#triggering-client-events). The trailing `clientEvents` argument of `handleWebSocketMessage` also defaults to `false` for existing callers.
+
+## Webhooks
+
+With `webhookUrl` configured and `clientEvents: true`, each accepted client event creates one `client_event` webhook after relay. It contains `channel`, `event`, the sending connection's `socket_id`, and `data` as a JSON-encoded string. Presence hooks also include the channel-authorized `user_id`. Client-supplied envelope identities are discarded.
+
+Rejected events create no hook, including disabled publishing, failed authorization, unsubscribed channels, invalid names or data, encrypted or public channels, oversized data, and rate limits. Webhook requests reuse the existing `time_ms` and `events` body, HMAC headers, and delivery retries. Delivery retries can repeat the same webhook request, so receivers should handle duplicates.

@@ -120,7 +120,7 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 				break
 			default:
 				if (typeof messageObj.event === 'string' && messageObj.event.startsWith('client-'))
-					publishClientEvent(ws, messageObj, clientEvents)
+					publishClientEvent(ws, messageObj, clientEvents, webhookDispatcher)
 				else
 					consola.error(`Unhandled Event - Event: ${messageObj.event}`)
 		}
@@ -130,7 +130,7 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 	}
 }
 
-function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: string, channel?: unknown, data?: unknown }, enabled: boolean) {
+function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: string, channel?: unknown, data?: unknown }, enabled: boolean, webhookDispatcher: WebhookDispatcher) {
 	const reject = (message: string) => {
 		ws.send(JSON.stringify({
 			event: 'pusher:error',
@@ -168,6 +168,14 @@ function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: 
 		data: frame.data,
 		...(isPresenceChannel ? { user_id: subscription.user_id } : {}),
 	}))
+	webhookDispatcher.send({
+		name: 'client_event',
+		channel,
+		event: frame.event,
+		socket_id: ws.data.socketId,
+		data: serializedData,
+		...(isPresenceChannel ? { user_id: subscription.user_id } : {}),
+	})
 }
 
 // Handles event publishing for POST requests
