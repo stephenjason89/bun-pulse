@@ -1,3 +1,14 @@
+## [2.4.0](https://github.com/stephenjason89/bun-pulse/compare/v2.3.0...v2.4.0) (2026-10-04)
+
+### 🚀 Features
+
+* add browser client for Pusher channel APIs ([786e777](https://github.com/stephenjason89/bun-pulse/commit/786e777e8ffe90775768cc7810f00d8eadeac693))
+
+### 🐛 Bug Fixes
+
+* **client:** enter failed state directly on terminal protocol errors ([5b387f8](https://github.com/stephenjason89/bun-pulse/commit/5b387f80e81e4325efad41e358f77838adeec955))
+* **client:** respect lifecycle callback cancellation ([788d299](https://github.com/stephenjason89/bun-pulse/commit/788d29997f0fec750e32745b2a50108b9ddba829))
+
 ## [2.3.0](https://github.com/stephenjason89/bun-pulse/compare/v2.2.0...v2.3.0) (2026-10-04)
 
 ### 🚀 Features
