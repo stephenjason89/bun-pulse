@@ -123,6 +123,7 @@ You can customize **BunPulse** by passing configuration options when starting th
 - `*`: All bun websocket server options are supported, see [bun docs](https://bun.sh/docs/api/http#bun-serve) for more info.
 - `port`: Specifies the port on which the WebSocket server listens (default: `6001`).
 - `webhookUrl`: An optional URL that receives Pusher-compatible channel and presence webhooks.
+- `requireHttpAuth`: Require signed Pusher HTTP publishing requests (default: `false`).
 - `heartbeat.interval`: The interval in milliseconds for checking connection activity (default: `25000`).
 - `heartbeat.timeout`: The inactivity timeout in milliseconds (default: `60000`).
 - `heartbeat.sendPing`: Whether to send server heartbeat pings (default: `false`).
@@ -143,7 +144,7 @@ const server = startBunPulse({
 
 ## Webhooks
 
-When `webhookUrl` is configured, BunPulse sends `channel_occupied`, `channel_vacated`, `member_added`, and `member_removed` events. Presence events include a `user_id`. Disconnect events wait one second before delivery so a quick reconnect can cancel them.
+When `webhookUrl` is configured, BunPulse sends `channel_occupied`, `channel_vacated`, `member_added`, and `member_removed` events. With `clientEvents: true`, it also sends `client_event` after accepted client events. These hooks include the sending `socket_id`, event name, and JSON-encoded data. Presence events include a `user_id`. See [client events](docs/client-events.md) for authorization, size, and rate limits. Disconnect events wait one second before delivery so a quick reconnect can cancel them.
 
 Each request uses the Pusher webhook format:
 
@@ -162,6 +163,16 @@ Each request uses the Pusher webhook format:
 BunPulse signs the exact JSON request body with `PUSHER_APP_SECRET`. The request includes `X-Pusher-Key` and `X-Pusher-Signature` headers. Failed requests are retried with exponential backoff for up to five minutes.
 
 ## Authentication
+
+### HTTP publishing authentication
+
+HTTP publishing accepts unsigned requests by default for existing installations. Enable `requireHttpAuth` before exposing the publishing endpoint to untrusted callers:
+
+```typescript
+startBunPulse({ requireHttpAuth: true })
+```
+
+This requires `PUSHER_APP_ID`, `PUSHER_APP_KEY`, and `PUSHER_APP_SECRET` at startup. Publishing then accepts only `POST /apps/{PUSHER_APP_ID}/events` with Pusher's signed query parameters. BunPulse verifies the app key, version `1.0`, a timestamp within ten minutes, the exact request body's MD5, and the HMAC signature. Invalid authentication returns `401`; other publishing routes return `404`. Official Pusher server SDKs sign requests automatically. Custom unsigned publishers must add signing or migrate to a server SDK before enabling this option. Restart the server after changing its HTTP credentials.
 
 **BunPulse** uses HMAC SHA256 authentication to ensure secure WebSocket connections. When clients subscribe to a channel, they must provide a valid `auth` token, which is verified by the server to authenticate the connection.
 

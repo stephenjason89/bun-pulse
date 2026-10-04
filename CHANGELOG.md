@@ -1,3 +1,31 @@
+## [2.2.0](https://github.com/stephenjason89/bun-pulse/compare/v2.1.1...v2.2.0) (2026-10-04)
+
+### 🚀 Features
+
+* enable authorized client events explicitly ([f395575](https://github.com/stephenjason89/bun-pulse/commit/f395575798440647ef1ddc7f38276aab24a40622))
+
+### 🛠️ Refactoring
+
+* simplify client event subscription lookup ([b6d8eb5](https://github.com/stephenjason89/bun-pulse/commit/b6d8eb5eea08db843487576a387efbc6eb1acd2c))
+
+## [2.1.1](https://github.com/stephenjason89/bun-pulse/compare/v2.1.0...v2.1.1) (2026-10-04)
+
+### 🐛 Bug Fixes
+
+* retain subscription state per channel ([cb46db3](https://github.com/stephenjason89/bun-pulse/commit/cb46db38659eb435d56b18baffcc105647020599))
+
+## [2.1.0](https://github.com/stephenjason89/bun-pulse/compare/v2.0.5...v2.1.0) (2026-10-04)
+
+### 🚀 Features
+
+* require signed HTTP publishing when enabled ([e15389f](https://github.com/stephenjason89/bun-pulse/commit/e15389f3a8e885b82d970cb157876e55d0b9bbbe))
+
+## [2.0.5](https://github.com/stephenjason89/bun-pulse/compare/v2.0.4...v2.0.5) (2026-10-04)
+
+### 🐛 Bug Fixes
+
+* reject malformed publish requests with bad request ([7c5a0e0](https://github.com/stephenjason89/bun-pulse/commit/7c5a0e0855ef9f1e4a6a1110acf3295a723aec86))
+
 ## [2.0.4](https://github.com/stephenjason89/bun-pulse/compare/v2.0.3...v2.0.4) (2026-10-03)
 
 ### 🐛 Bug Fixes

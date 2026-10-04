@@ -1,6 +1,7 @@
 import type { ServeOptions, ServerWebSocket } from 'bun'
 import type { WebSocketData } from './types'
 import { consola } from 'consola'
+import { verifyHttpRequest } from './http-auth'
 import { axiom } from './utils'
 import { createWebhookDispatcher } from './webhook'
 import {
@@ -13,6 +14,8 @@ import {
 
 interface BunPulseConfig {
 	webhookUrl?: string
+	requireHttpAuth?: boolean
+	clientEvents?: boolean
 	heartbeat?: {
 		interval?: number
 		timeout?: number
@@ -21,25 +24,40 @@ interface BunPulseConfig {
 }
 
 export function startBunPulse(config: BunPulseConfig & Partial<ServeOptions> = {}) {
-	if (!import.meta.env.PUSHER_APP_KEY || !import.meta.env.PUSHER_APP_SECRET)
+	const appKey = import.meta.env.PUSHER_APP_KEY
+	const secret = import.meta.env.PUSHER_APP_SECRET
+	if (!appKey || !secret)
 		throw new Error('PUSHER_APP_KEY and PUSHER_APP_SECRET are required')
 
-	const { webhookUrl, heartbeat = {}, ...serverOptions } = config
+	const { webhookUrl, requireHttpAuth = false, clientEvents = false, heartbeat = {}, ...serverOptions } = config
+	if (typeof requireHttpAuth !== 'boolean')
+		throw new Error('requireHttpAuth must be a boolean')
+	if (typeof clientEvents !== 'boolean')
+		throw new Error('clientEvents must be a boolean')
+	const appId = import.meta.env.PUSHER_APP_ID
+	if (requireHttpAuth && !appId?.trim())
+		throw new Error('PUSHER_APP_ID is required when requireHttpAuth is enabled')
+	const httpAuth = requireHttpAuth ? { appId, appKey, secret } : undefined
 	const finalHeartbeat = { interval: 25000, timeout: 60000, sendPing: false, ...heartbeat }
 	const webhookDispatcher = createWebhookDispatcher(webhookUrl)
 
 	const server = Bun.serve({
 		port: 6001,
 		...serverOptions,
-		fetch(req, server) {
+		async fetch(req, server) {
 			if (req.method === 'POST') {
+				if (httpAuth) {
+					const rejected = await verifyHttpRequest(req.clone(), httpAuth)
+					if (rejected)
+						return rejected
+				}
 				return handleEventPublishing(req, server)
 			}
 			return handleWebSocketUpgrade(req, server)
 		},
 		websocket: {
 			message(ws: ServerWebSocket<WebSocketData>, message) {
-				handleWebSocketMessage(ws, message, server, webhookDispatcher)
+				handleWebSocketMessage(ws, message, server, webhookDispatcher, clientEvents)
 			},
 			open: (ws) => {
 				initializeWebSocketConnection(ws, finalHeartbeat, server)

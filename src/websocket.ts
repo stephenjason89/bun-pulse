@@ -17,6 +17,7 @@ import { noOpWebhookDispatcher } from './webhook'
 
 const channels: Channels = Object.create(null)
 const sockets = new WeakMap<Server, Map<string, ServerWebSocket<WebSocketData>>>()
+const clientEventTimes = new WeakMap<ServerWebSocket<WebSocketData>, number[]>()
 
 // Initializes a WebSocket connection with heartbeat settings
 export function initializeWebSocketConnection(ws: ServerWebSocket<WebSocketData>, heartbeat: { interval: number, timeout: number, sendPing: boolean }, server?: Server) {
@@ -71,6 +72,7 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 			version: url.searchParams.get('version') || 'N/A',
 			protocol: url.searchParams.get('protocol') || 'N/A',
 			subscribedChannels: [],
+			subscriptions: Object.create(null),
 		},
 	})
 
@@ -85,10 +87,21 @@ export async function handleWebSocketUpgrade(req: Request, server: Server) {
 }
 
 // Handles incoming WebSocket messages
-export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher) {
+export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer, server: Server, webhookDispatcher: WebhookDispatcher = noOpWebhookDispatcher, clientEvents = false) {
 	try {
 		consola.info(`Message Received - Socket ID: ${ws.data.socketId}`)
-		const messageObj = JSON.parse(String(message)) as Omit<PusherEvent, 'channel'>
+		let messageObj: PusherEvent
+		try {
+			messageObj = JSON.parse(String(message))
+		}
+		catch {
+			ws.send(JSON.stringify({ event: 'pusher:error', data: { message: 'Invalid JSON message' } }))
+			return
+		}
+		if (!messageObj || typeof messageObj !== 'object' || Array.isArray(messageObj)) {
+			ws.send(JSON.stringify({ event: 'pusher:error', data: { message: 'Invalid message object' } }))
+			return
+		}
 		messageLogger.box(messageObj)
 
 		switch (messageObj.event) {
@@ -106,7 +119,10 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 				unsubscribeFromChannel(ws, messageObj.data.channel, server, webhookDispatcher)
 				break
 			default:
-				consola.error(`Unhandled Event - Event: ${messageObj.event}`)
+				if (typeof messageObj.event === 'string' && messageObj.event.startsWith('client-'))
+					publishClientEvent(ws, messageObj, clientEvents, webhookDispatcher)
+				else
+					consola.error(`Unhandled Event - Event: ${messageObj.event}`)
 		}
 	}
 	catch (error) {
@@ -114,10 +130,61 @@ export function handleWebSocketMessage(ws: ServerWebSocket<WebSocketData>, messa
 	}
 }
 
+function publishClientEvent(ws: ServerWebSocket<WebSocketData>, frame: { event: string, channel?: unknown, data?: unknown }, enabled: boolean, webhookDispatcher: WebhookDispatcher) {
+	const reject = (message: string) => {
+		ws.send(JSON.stringify({
+			event: 'pusher:error',
+			...(typeof frame.channel === 'string' ? { channel: frame.channel } : {}),
+			data: { message },
+		}))
+	}
+	if (enabled !== true)
+		return reject('Client events are disabled')
+	if (frame.event.length <= 'client-'.length || frame.event.length > 200)
+		return reject('Invalid client event name')
+	const channel = frame.channel
+	if (typeof channel !== 'string' || channel.length > 200 || !/^(?:private-|presence-)[\w\-=@,.;]+$/.test(channel) || channel.startsWith('private-encrypted-'))
+		return reject('Client events require a private or presence channel')
+	const subscription = ws.data.subscriptions?.[channel]
+	if (!subscription?.auth || !ws.data.subscribedChannels.includes(channel))
+		return reject('Client event requires an authorized subscription')
+	const isPresenceChannel = channel.startsWith('presence-')
+	if (isPresenceChannel && (typeof subscription.user_id !== 'string' || !subscription.user_id))
+		return reject('Client event requires an authorized presence identity')
+	const serializedData = JSON.stringify(frame.data)
+	if (serializedData === undefined)
+		return reject('Client event data is required')
+	if (Buffer.byteLength(serializedData, 'utf8') > 10240)
+		return reject('Client event data exceeds 10KB')
+	const now = Date.now()
+	const recent = (clientEventTimes.get(ws) ?? []).filter(time => now - time < 1000)
+	if (recent.length >= 10)
+		return reject('Client event rate limit exceeded')
+	recent.push(now)
+	clientEventTimes.set(ws, recent)
+	ws.publish(channel, JSON.stringify({
+		event: frame.event,
+		channel,
+		data: frame.data,
+		...(isPresenceChannel ? { user_id: subscription.user_id } : {}),
+	}))
+	webhookDispatcher.send({
+		name: 'client_event',
+		channel,
+		event: frame.event,
+		socket_id: ws.data.socketId,
+		data: serializedData,
+		...(isPresenceChannel ? { user_id: subscription.user_id } : {}),
+	})
+}
+
 // Handles event publishing for POST requests
 export async function handleEventPublishing(req: Request, server: Server) {
 	try {
-		const body = (await req.json()) as { name?: unknown, channel?: string, channels?: unknown, data?: unknown, socket_id?: unknown }
+		const parsedBody: unknown = await req.json().catch(() => undefined)
+		if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody))
+			return new Response('Bad Request', { status: 400 })
+		const body = parsedBody as { name?: unknown, channel?: unknown, channels?: unknown, data?: unknown, socket_id?: unknown }
 		const eventChannels = body.channels ?? (body.channel ? [body.channel] : [])
 		if (typeof body.name !== 'string' || !body.name || (typeof body.data !== 'string' && (typeof body.data !== 'object' || body.data === null)) || !Array.isArray(eventChannels) || !eventChannels.length || eventChannels.some(channel => typeof channel !== 'string' || !channel))
 			return new Response('Bad Request', { status: 400 })
@@ -190,13 +257,29 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 	}
 
 	const { channel, auth = '', channel_data } = subscriptionData
-	Object.assign(ws.data, { channel, auth, channel_data })
-	const canceledVacancy = webhookDispatcher.cancel(channelVacatedWebhookKey(channel))
-
-	if (!ws.data.subscribedChannels.includes(channel)) {
-		ws.data.subscribedChannels.push(channel)
+	const existingUserId = Object.keys(channels[channel] ?? {}).find(id => channels[channel][id].sockets.has(ws.data.socketId))
+	if (isPresenceChannel && existingUserId !== undefined && existingUserId !== String(user_id)) {
+		ws.send(JSON.stringify({
+			event: 'pusher:error',
+			channel,
+			data: { message: 'Already subscribed with a different user_id' },
+		}))
+		return
 	}
-	ws.subscribe(channel)
+
+	if (existingUserId === undefined) {
+		ws.subscribe(channel)
+		ws.data.subscriptions ??= Object.create(null)
+		ws.data.subscriptions[channel] = {
+			auth,
+			...(channel_data === undefined ? {} : { channel_data }),
+			...(isPresenceChannel ? { user_id: String(user_id) } : {}),
+		}
+		Object.assign(ws.data, { channel, auth, channel_data })
+		if (!ws.data.subscribedChannels.includes(channel))
+			ws.data.subscribedChannels.push(channel)
+	}
+	const canceledVacancy = webhookDispatcher.cancel(channelVacatedWebhookKey(channel))
 
 	if (!channels[channel]) {
 		channels[channel] = Object.create(null)
@@ -205,7 +288,7 @@ function subscribeToChannel(ws: ServerWebSocket<WebSocketData>, subscriptionData
 		}
 	}
 
-	const user = channels[channel][user_id ?? 'guest']
+	const user = channels[channel][existingUserId ?? user_id ?? 'guest']
 
 	if (user) {
 		// Add this socket to the user's existing connections
@@ -268,6 +351,8 @@ export function unsubscribeFromChannel(ws: ServerWebSocket<WebSocketData>, chann
 		return
 	ws.unsubscribe(channel)
 	ws.data.subscribedChannels = ws.data.subscribedChannels.filter(subscribedChannel => subscribedChannel !== channel)
+	if (ws.data.subscriptions)
+		delete ws.data.subscriptions[channel]
 	consola.info(`Unsubscribed - Socket ID: ${ws.data.socketId}, Channel: ${channel}`)
 
 	const channelMembers = channels[channel]
