@@ -8,6 +8,84 @@ interface EventSource {
 	bind: (event: string, callback: (...args: any[]) => void) => unknown
 	unbind: (event: string, callback: (...args: any[]) => void) => unknown
 }
+
+async function withConnectionCallbacks(run: (client: BunPulseClient, connectionCount: () => number, close: () => void) => Promise<void>) {
+	let count = 0
+	let socket: { close: (code?: number) => void }
+	const server = Bun.serve({
+		hostname: '127.0.0.1',
+		port: 0,
+		fetch(req, server) {
+			if (server.upgrade(req))
+				return
+			return new Response('Bad Request', { status: 400 })
+		},
+		websocket: {
+			open(ws) {
+				socket = ws
+				ws.send(JSON.stringify({ event: 'pusher:connection_established', data: JSON.stringify({ socket_id: `${++count}.1` }) }))
+			},
+			message() {},
+		},
+	})
+	const client = new BunPulseClient('callback-key', { wsHost: '127.0.0.1', wsPort: server.port, forceTLS: false, reconnectDelay: 5, maxReconnectDelay: 5 })
+	try {
+		await nextEvent(client.connection, 'connected')
+		await run(client, () => count, () => socket.close(1001))
+	}
+	finally {
+		client.disconnect()
+		server.stop(true)
+	}
+}
+
+it('disconnect from connecting callbacks cancels opening the socket', async () => {
+	for (const event of ['connecting', 'state_change']) {
+		await withConnectionCallbacks(async (client, count) => {
+			client.disconnect()
+			client.connection.bind(event, (change) => {
+				if (event === 'connecting' || change.current === 'connecting')
+					client.disconnect()
+			})
+			client.connect()
+			await Bun.sleep(40)
+			expect(client.connection.state).toBe('disconnected')
+			expect(count()).toBe(1)
+		})
+	}
+})
+
+it('disconnect from unavailable callbacks cancels retrying the socket', async () => {
+	for (const event of ['unavailable', 'state_change']) {
+		await withConnectionCallbacks(async (client, count, close) => {
+			client.connection.bind(event, (change) => {
+				if (event === 'unavailable' || change.current === 'unavailable')
+					client.disconnect()
+			})
+			close()
+			await Bun.sleep(40)
+			expect(client.connection.state).toBe('disconnected')
+			expect(count()).toBe(1)
+		})
+	}
+})
+
+it('connect from connecting callbacks opens only one replacement socket', async () => {
+	for (const event of ['connecting', 'state_change']) {
+		await withConnectionCallbacks(async (client, count) => {
+			client.disconnect()
+			client.connection.bind(event, (change) => {
+				if (event === 'connecting' || change.current === 'connecting')
+					client.connect()
+			})
+			const connected = nextEvent(client.connection, 'connected')
+			client.connect()
+			await connected
+			await Bun.sleep(40)
+			expect(count()).toBe(2)
+		})
+	}
+})
 function nextEvent<T = unknown>(source: EventSource, event: string): Promise<T> {
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => {

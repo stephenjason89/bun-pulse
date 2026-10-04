@@ -2,6 +2,8 @@
 
 `bun-pulse/client` replaces `pusher-js` for the common WebSocket channel API when connecting to your BunPulse server. The server entry remains `bun-pulse`. The client module uses native `WebSocket` and `fetch`, has no runtime dependencies and contains no server code. Use your public application key in the browser. Keep the application secret on your authorization server.
 
+The extensionless `bun-pulse/client` entry works with browser bundlers and Bun. Native Node ESM requires `bun-pulse/client.js`. The package keeps its existing deep import resolution without introducing an exports map.
+
 ```ts
 import BunPulseClient from 'bun-pulse/client'
 

@@ -170,7 +170,8 @@ export class ClientConnection extends Dispatcher {
 		const previous = this.state
 		this.state = state
 		this.emit('state_change', { previous, current: state })
-		this.emit(state)
+		if (this.state === state)
+			this.emit(state)
 	}
 }
 
@@ -214,8 +215,10 @@ export default class BunPulseClient extends Dispatcher {
 			return
 		this.stopped = false
 		clearTimeout(this.reconnectTimer)
-		this.connection.setState('connecting')
 		const generation = ++this.generation
+		this.connection.setState('connecting')
+		if (this.stopped || this.generation !== generation || this.connection.state !== 'connecting')
+			return
 		const tls = this.options.forceTLS !== false
 		const port = tls ? (this.options.wssPort ?? 443) : (this.options.wsPort ?? 80)
 		const path = (this.options.wsPath ?? '').replace(/\/$/, '')
@@ -336,7 +339,10 @@ export default class BunPulseClient extends Dispatcher {
 	private scheduleReconnect(): void {
 		if (this.stopped)
 			return
+		const generation = this.generation
 		this.connection.setState('unavailable')
+		if (this.stopped || this.generation !== generation || this.connection.state !== 'unavailable')
+			return
 		const delay = Math.min((this.options.reconnectDelay ?? 1000) * 2 ** Math.min(this.retry++, 16), this.options.maxReconnectDelay ?? 30000)
 		clearTimeout(this.reconnectTimer)
 		this.reconnectTimer = setTimeout(() => this.connect(), delay)
